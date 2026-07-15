@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.4.0
+
+- Novo **método híbrido de distância** (mais preciso que o do Strava, que superestima ~2–3%):
+  - **#1 Integração da velocidade (Doppler)**: quando o GPS reporta velocidade, a distância vira ∫v·dt — imune ao tremor de posição que inflava o valor. Auto-pause embutido (parado não conta).
+  - **#2 Rejeição de spike/teleporte**: descarta pontos que implicam velocidade impossível (>200 km/h) ou muito acima da velocidade Doppler, sem mover a referência.
+  - Fallback por posição (com limiar proporcional à precisão) quando a velocidade não está disponível.
+  - Validado por simulação e no código do app: reto 100m→~100m; sinuoso→sem overshoot; parado→0; **spike de 500m→ignorado** (antes somava +500m); 1000m→~1005m.
+
 ## v1.3.4
 
 - Mostra a **versão do app** no rodapé, para não confundir builds. No app nativo, inclui também o **hash do commit + data** (injetado no build por `scripts/copy-web.mjs`), identificando exatamente de qual commit veio cada APK.

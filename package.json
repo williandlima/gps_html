@@ -1,6 +1,6 @@
 {
   "name": "gps-tracker",
-  "version": "1.3.4",
+  "version": "1.4.0",
   "description": "GPS Tracker - posição atual e distância percorrida, com rastreamento em segundo plano (Android via Capacitor).",
   "private": true,
   "scripts": {

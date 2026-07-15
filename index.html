@@ -291,7 +291,9 @@
   const roseEl = $('rose'), headingEl = $('heading'), declinationEl = $('declination'), btnCompass = $('btnCompass');
 
   let watchId = null;
-  let lastPos = null;        // {latitude, longitude, accuracy} do último ponto contado
+  let lastPos = null;        // último ponto de referência (posição)
+  let lastTime = null;       // timestamp (ms) da última leitura aceita
+  let lastSpeed = null;      // velocidade (m/s) da última leitura aceita
   let totalDistance = 0;
   let startTime = null;
   let elapsedTimer = null;
@@ -323,7 +325,7 @@
 
   // Versão do app (mantida em sincronia com package.json). BUILD_INFO é substituído
   // pelo hash do commit + data no build nativo (scripts/copy-web.mjs); na web fica só a versão.
-  const APP_VERSION = '1.3.4';
+  const APP_VERSION = '1.4.0';
   const BUILD_INFO = '__BUILD__';
   (function showVersion() {
     const built = BUILD_INFO.indexOf('__') === 0 ? '' : ' · ' + BUILD_INFO;
@@ -335,10 +337,14 @@
   const MAX_ACCURACY_M = 20; // precisão considerada "boa" no botão Obter Posição
   const COARSE_ACCURACY_M = 200; // acima disso é quase certamente localização aproximada (rede/Wi-Fi), não GPS
   const ACCEPT_ACCURACY_M = 25; // no rastreamento, descarta leituras piores que isso (ruído demais)
-  const MIN_MOVE_M = 15; // piso do limiar de movimento (metros)
+  const MIN_MOVE_M = 15; // piso do limiar de movimento (metros) — usado no fallback por posição
   const NOISE_FACTOR = 1.5; // limiar de movimento = max(MIN_MOVE_M, NOISE_FACTOR * precisão)
   const MIN_SPEED_MS = 0.5; // abaixo desta velocidade (m/s ~1.8 km/h) trata como parado (não acumula)
   const NATIVE_DISTANCE_FILTER_M = 10; // distanceFilter do plugin nativo (espaçamento mínimo entre leituras)
+  const MAX_SPEED_MS = 55; // acima disso (~200 km/h) é teleporte/spike do GPS — descarta o ponto
+  const SPIKE_FACTOR = 3; // ou se a velocidade implícita pela posição for > SPIKE_FACTOR x a velocidade Doppler
+  const SPIKE_MARGIN_MS = 5; // (+ esta margem), também trata como spike
+  const MAX_DT_S = 30; // acima deste intervalo entre leituras, não integra velocidade (usa fallback por posição)
   const STORAGE_KEY = 'gpsTrackerSession'; // sessão persistida (sobrevive a fechar/reabrir o app)
 
   function haversine(lat1, lon1, lat2, lon2) {
@@ -609,41 +615,74 @@
 
   // Núcleo do cálculo: recebe uma posição e acumula distância se for movimento real.
   // Usado tanto pelo watch contínuo quanto pela "costura" ao voltar do segundo plano.
+  // Núcleo do cálculo (método híbrido, inspirado no que apps de precisão fazem
+  // melhor que o Strava):
+  //   #1 INTEGRAÇÃO DA VELOCIDADE: quando o GPS reporta velocidade (Doppler),
+  //      a distância é ∫v·dt — muito mais estável que somar posições ruidosas,
+  //      pois a velocidade Doppler quase não sofre com o tremor de posição.
+  //      Auto-pause embutido: abaixo de MIN_SPEED_MS não acumula (elimina
+  //      "distância fantasma" parado).
+  //   #2 REJEIÇÃO DE SPIKE/TELEPORTE: pontos que implicam velocidade impossível
+  //      (ou muito acima da velocidade Doppler) são descartados sem mover a
+  //      referência — evita saltos gigantes por falha momentânea do GPS.
+  //   Fallback: sem velocidade confiável (ou intervalo grande), volta a somar
+  //   posições com limiar proporcional à precisão (anti-zigue-zague).
   function ingestPosition(pos) {
-    // 1) Descarta leituras com precisão ruim demais (ruído domina).
-    if (pos.coords.accuracy > ACCEPT_ACCURACY_M) return false;
+    const acc = pos.coords.accuracy;
+    if (acc > ACCEPT_ACCURACY_M) return false;
 
-    // 2) Gate de VELOCIDADE: a velocidade do GPS (efeito Doppler) detecta "parado"
-    //    de forma muito mais confiável que a diferença de posição. Se o aparelho
-    //    reporta velocidade abaixo de MIN_SPEED_MS, tratamos como parado e não
-    //    acumulamos (e mantemos lastPos, para medir o próximo movimento real a
-    //    partir daqui). Isso elimina a "distância fantasma" com o GPS oscilando
-    //    parado. Só aplica quando a velocidade está disponível e é confiável.
-    const spd = pos.coords.speed;
-    if (typeof spd === 'number' && spd >= 0 && spd < MIN_SPEED_MS) return false;
+    const now = pos.timestamp || Date.now();
+    const rawSpeed = pos.coords.speed;
+    const spRef = (typeof rawSpeed === 'number' && rawSpeed >= 0) ? rawSpeed : null;
 
-    if (lastPos) {
-      const d = haversine(
-        lastPos.coords.latitude, lastPos.coords.longitude,
-        pos.coords.latitude, pos.coords.longitude
-      );
-      // 3) Limiar de movimento PROPORCIONAL À PRECISÃO: um deslocamento só conta se
-      //    superar o ruído esperado do GPS, nunca abaixo de MIN_MOVE_M. Reduz a
-      //    inflação da distância causada pelo zigue-zague do sinal ao caminhar.
-      const worstAcc = Math.max(pos.coords.accuracy, lastPos.coords.accuracy || 0);
-      const threshold = Math.max(MIN_MOVE_M, NOISE_FACTOR * worstAcc);
-      if (d >= threshold) {
-        totalDistance += d;
-        distanceEl.textContent = formatDistance(totalDistance);
-        lastPos = pos;
-        saveState();
-        return true;
+    // primeira leitura da sessão (ou logo após retomar): só inicializa referências
+    if (!lastPos || lastTime === null) {
+      lastPos = pos; lastTime = now; lastSpeed = spRef; saveState(); return false;
+    }
+
+    const dt = (now - lastTime) / 1000; // segundos
+    const dPos = haversine(
+      lastPos.coords.latitude, lastPos.coords.longitude,
+      pos.coords.latitude, pos.coords.longitude
+    );
+    const impliedSpeed = dt > 0 ? dPos / dt : 0;
+
+    // #2 spike/teleporte: ignora o ponto (não move a referência)
+    if (impliedSpeed > MAX_SPEED_MS ||
+        (spRef !== null && impliedSpeed > spRef * SPIKE_FACTOR + SPIKE_MARGIN_MS)) {
+      return false;
+    }
+
+    let added = 0;
+    if (spRef !== null && dt > 0 && dt <= MAX_DT_S) {
+      // #1 integração da velocidade. Auto-pause pela velocidade ATUAL (não a média):
+      // parado, spRef < MIN_SPEED_MS -> não acumula. Em movimento, usa a média
+      // trapezoidal só quando a leitura anterior também estava em movimento (evita
+      // vazamento na transição andar->parar).
+      if (spRef >= MIN_SPEED_MS) {
+        const prevMoving = (lastSpeed != null && lastSpeed >= MIN_SPEED_MS);
+        const v = prevMoving ? (lastSpeed + spRef) / 2 : spRef;
+        added = v * dt;
       }
     } else {
-      lastPos = pos;
-      saveState();
+      // fallback por posição: limiar proporcional à precisão
+      const threshold = Math.max(MIN_MOVE_M, NOISE_FACTOR * Math.max(acc, lastPos.coords.accuracy || 0));
+      if (dPos >= threshold) {
+        added = dPos;
+      } else {
+        // movimento pequeno demais: mantém a referência de posição, atualiza só tempo/vel
+        lastTime = now; lastSpeed = spRef;
+        return false;
+      }
     }
-    return false;
+
+    if (added > 0) {
+      totalDistance += added;
+      distanceEl.textContent = formatDistance(totalDistance);
+    }
+    lastPos = pos; lastTime = now; lastSpeed = spRef;
+    saveState();
+    return added > 0;
   }
 
   // ---- Wake Lock: mantém a tela ligada durante o rastreamento ----
@@ -758,6 +797,8 @@
     // início do zero
     totalDistance = 0;
     lastPos = null;
+    lastTime = null;
+    lastSpeed = null;
     startTime = Date.now();
     distanceEl.textContent = formatDistance(0);
     speedEl.textContent = '—';
