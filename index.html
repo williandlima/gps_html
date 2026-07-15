@@ -171,6 +171,7 @@
   let elapsedTimer = null;
 
   const R = 6371000; // raio da Terra em metros
+  const MAX_ACCURACY_M = 20; // descarta leituras com precisão pior que isso para o cálculo de distância
 
   function haversine(lat1, lon1, lat2, lon2) {
     const toRad = (d) => d * Math.PI / 180;
@@ -277,17 +278,26 @@
     watchId = navigator.geolocation.watchPosition(
       (pos) => {
         renderPosition(pos);
-        if (lastPos && pos.coords.accuracy <= 50) {
+
+        if (pos.coords.accuracy > MAX_ACCURACY_M) {
+          // leitura ruim demais para confiar na distância: atualiza só o painel de posição
+          return;
+        }
+
+        if (lastPos) {
           const d = haversine(
             lastPos.coords.latitude, lastPos.coords.longitude,
             pos.coords.latitude, pos.coords.longitude
           );
-          if (d > 0.5) {
+          // só conta como deslocamento real se superar o raio de incerteza combinado
+          // dos dois pontos; abaixo disso é ruído do próprio GPS, não movimento
+          const noiseThreshold = pos.coords.accuracy + lastPos.coords.accuracy;
+          if (d > noiseThreshold) {
             totalDistance += d;
             distanceEl.textContent = formatDistance(totalDistance);
             lastPos = pos;
           }
-        } else if (!lastPos) {
+        } else {
           lastPos = pos;
         }
       },
