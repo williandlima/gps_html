@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.3.1
+
+- Modo **diagnóstico** na bússola (botão "Mostrar diagnóstico"): exibe os valores crus do sensor (`alpha`, `webkitCompassHeading`, rumo bruto, ângulo da tela, rumo magnético, declinação e rumo verdadeiro), para verificar/depurar o comportamento do magnetômetro em cada aparelho.
+
 ## v1.3.0
 
 - Nova **bússola de Norte Verdadeiro**: aponta para o norte geográfico, não o magnético.

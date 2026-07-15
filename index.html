@@ -199,6 +199,18 @@
     background: #64748b;
     border-radius: 2px;
   }
+  #compassDebug {
+    margin: 10px 0 0;
+    padding: 10px;
+    background: #0b1220;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: var(--muted);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
 </style>
 </head>
 <body>
@@ -234,6 +246,8 @@
     <div class="row"><span>Rumo do aparelho</span><span id="heading">—</span></div>
     <div class="row"><span>Declinação magnética</span><span id="declination">—</span></div>
     <button id="btnCompass" class="btn-secondary" style="margin-top:12px;">Ativar Bússola</button>
+    <button id="btnDebug" class="btn-secondary" style="margin-top:8px;">Mostrar diagnóstico</button>
+    <pre id="compassDebug" hidden></pre>
   </div>
 
   <div class="card big-stat">
@@ -354,6 +368,25 @@
     headingEl.textContent = `${trueHeading.toFixed(0)}° ${cardinal(trueHeading)}${suffix}`;
   }
 
+  let debugOn = false;
+  function updateDebug(ev, heading, screenAngle) {
+    if (!debugOn) return;
+    const trueHeading = magneticHeading === null ? null
+      : ((magneticHeading + (declination || 0)) % 360 + 360) % 360;
+    const f = (v) => (typeof v === 'number' ? v.toFixed(1) : '—');
+    compassDebug.textContent =
+      `evento: ${ev.type}\n` +
+      `absolute: ${ev.absolute}\n` +
+      `alpha (α): ${f(ev.alpha)}\n` +
+      `webkitCompassHeading: ${f(ev.webkitCompassHeading)}\n` +
+      `webkitCompassAccuracy: ${f(ev.webkitCompassAccuracy)}\n` +
+      `rumo bruto: ${f(heading)}\n` +
+      `ângulo da tela: ${screenAngle}\n` +
+      `rumo magnético: ${f(magneticHeading)}\n` +
+      `declinação: ${f(declination)}\n` +
+      `RUMO VERDADEIRO: ${f(trueHeading)}`;
+  }
+
   function onOrientation(ev) {
     let heading = null;
     if (typeof ev.webkitCompassHeading === 'number') {
@@ -361,11 +394,23 @@
     } else if (ev.absolute === true && typeof ev.alpha === 'number') {
       heading = 360 - ev.alpha;          // Android (orientação absoluta)
     }
-    if (heading === null) return;
     const screenAngle = (screen.orientation && screen.orientation.angle) || 0;
-    magneticHeading = ((heading + screenAngle) % 360 + 360) % 360;
-    renderCompass();
+    if (heading !== null) {
+      magneticHeading = ((heading + screenAngle) % 360 + 360) % 360;
+      renderCompass();
+    }
+    updateDebug(ev, heading, screenAngle);
   }
+
+  const compassDebug = $('compassDebug'), btnDebug = $('btnDebug');
+  btnDebug.addEventListener('click', () => {
+    debugOn = !debugOn;
+    compassDebug.hidden = !debugOn;
+    btnDebug.textContent = debugOn ? 'Ocultar diagnóstico' : 'Mostrar diagnóstico';
+    if (debugOn && !compassActive) {
+      compassDebug.textContent = 'Toque em "Ativar Bússola" para ver os valores do sensor.';
+    }
+  });
 
   async function activateCompass() {
     if (compassActive) return;
