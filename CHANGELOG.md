@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.3.0
+
+- Nova **bússola de Norte Verdadeiro**: aponta para o norte geográfico, não o magnético.
+  - Usa o sensor de orientação do aparelho (`DeviceOrientation`) para o rumo magnético.
+  - Corrige para o norte verdadeiro aplicando a **declinação magnética** calculada pela posição (lat/lon) com o modelo **WMM2025** (embutido offline via `geomag.bundle.js`, biblioteca `geomagnetism`, Apache-2.0).
+  - Mostra rumo do aparelho, declinação e uma rosa dos ventos que gira para o N apontar ao norte real.
+  - No iOS pede permissão do sensor por gesto ("Ativar Bússola"); no Android usa a orientação absoluta.
+  - Declinação verificada contra referências do NOAA (ex.: Tóquio -7,9°, São Paulo -21,9°).
+
 ## v1.2.3
 
 - Corrige a precisão do VALOR da distância: com o aparelho parado e sinal fraco, o método antigo (limiar fixo de 5m) contava "distância fantasma" (dezenas a centenas de metros parado, quando a precisão era 25–35m).

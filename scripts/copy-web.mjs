@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const www = join(root, 'www');
 
-const FILES = ['index.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
+const FILES = ['index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'geomag.bundle.js'];
 
 if (existsSync(www)) rmSync(www, { recursive: true, force: true });
 mkdirSync(www, { recursive: true });

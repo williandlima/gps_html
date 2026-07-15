@@ -135,6 +135,70 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
   }
+  #compassWrap {
+    display: flex;
+    justify-content: center;
+    margin: 4px 0 16px;
+  }
+  #compass {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 45%, #223049, #131c2e);
+    border: 2px solid var(--border);
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+  }
+  /* seta fixa no topo: indica para onde o topo do aparelho aponta */
+  #deviceMark {
+    position: absolute;
+    top: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1;
+  }
+  /* rosa dos ventos: gira para que o N aponte para o norte verdadeiro */
+  #rose {
+    position: absolute;
+    inset: 0;
+    transition: transform 0.15s ease-out;
+  }
+  .tick {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--muted);
+  }
+  .tick.n { top: 10px; color: #f87171; }
+  .tick.s { bottom: 10px; }
+  .tick.e { right: 12px; top: 50%; left: auto; transform: translateY(-50%); }
+  .tick.w { left: 12px; top: 50%; transform: translateY(-50%); }
+  /* agulha: metade vermelha (norte) para cima */
+  #needle {
+    position: absolute;
+    left: 50%;
+    top: 26px;
+    width: 4px;
+    height: 74px;
+    margin-left: -2px;
+    background: linear-gradient(#ef4444 0%, #ef4444 100%);
+    border-radius: 2px;
+  }
+  #needle::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 74px;
+    width: 4px;
+    height: 74px;
+    margin-left: -2px;
+    background: #64748b;
+    border-radius: 2px;
+  }
 </style>
 </head>
 <body>
@@ -152,6 +216,25 @@
   </div>
 
   <button id="btnGet" class="btn-secondary">Obter Posição Atual</button>
+
+  <div class="card">
+    <h2>Bússola — Norte Verdadeiro</h2>
+    <div id="compassWrap">
+      <div id="compass">
+        <div id="rose">
+          <div class="tick n">N</div>
+          <div class="tick e">L</div>
+          <div class="tick s">S</div>
+          <div class="tick w">O</div>
+          <div id="needle"></div>
+        </div>
+        <div id="deviceMark">▲</div>
+      </div>
+    </div>
+    <div class="row"><span>Rumo do aparelho</span><span id="heading">—</span></div>
+    <div class="row"><span>Declinação magnética</span><span id="declination">—</span></div>
+    <button id="btnCompass" class="btn-secondary" style="margin-top:12px;">Ativar Bússola</button>
+  </div>
 
   <div class="card big-stat">
     <div class="value" id="distance">0 m</div>
@@ -172,6 +255,7 @@
   fica salva e pode ser retomada mesmo se o app for fechado.</p>
 </main>
 
+<script src="geomag.bundle.js"></script>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -181,6 +265,7 @@
   const distanceEl = $('distance'), elapsedEl = $('elapsed');
   const speedEl = $('speed'), avgSpeedEl = $('avgSpeed');
   const btnGet = $('btnGet'), btnStart = $('btnStart'), btnStop = $('btnStop');
+  const roseEl = $('rose'), headingEl = $('heading'), declinationEl = $('declination'), btnCompass = $('btnCompass');
 
   let watchId = null;
   let lastPos = null;        // {latitude, longitude, accuracy} do último ponto contado
@@ -234,6 +319,83 @@
     return m < 1000 ? `${m.toFixed(1)} m` : `${(m / 1000).toFixed(3)} km`;
   }
 
+  // ---------- Bússola de Norte Verdadeiro ----------
+  let declination = null;     // graus (positivo = norte magnético a leste do verdadeiro)
+  let magneticHeading = null; // rumo do topo do aparelho relativo ao norte magnético
+  let compassActive = false;
+
+  const CARDINAIS = ['N','NE','L','SE','S','SO','O','NO'];
+  function cardinal(deg) {
+    return CARDINAIS[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+  }
+
+  // Recalcula a declinação magnética (WMM2025) para a posição atual.
+  // Só recalcula se andou o suficiente para mudar de forma perceptível.
+  let lastDeclLat = null, lastDeclLon = null;
+  function updateDeclination(lat, lon) {
+    if (typeof geomagnetism === 'undefined') return;
+    if (lastDeclLat !== null && haversine(lastDeclLat, lastDeclLon, lat, lon) < 1000) return;
+    try {
+      declination = geomagnetism.model(new Date()).point([lat, lon]).decl;
+      lastDeclLat = lat; lastDeclLon = lon;
+      const dir = declination >= 0 ? 'L' : 'O';
+      declinationEl.textContent = `${declination.toFixed(1)}° ${dir}`;
+      renderCompass();
+    } catch (e) { /* fora do intervalo do modelo, etc. */ }
+  }
+
+  function renderCompass() {
+    if (magneticHeading === null) return;
+    // rumo verdadeiro = rumo magnético + declinação (leste positivo)
+    const trueHeading = ((magneticHeading + (declination || 0)) % 360 + 360) % 360;
+    // gira a rosa para que o N aponte ao norte verdadeiro na tela
+    roseEl.style.transform = `rotate(${-trueHeading}deg)`;
+    const suffix = declination === null ? ' (sem posição: norte magnético)' : '';
+    headingEl.textContent = `${trueHeading.toFixed(0)}° ${cardinal(trueHeading)}${suffix}`;
+  }
+
+  function onOrientation(ev) {
+    let heading = null;
+    if (typeof ev.webkitCompassHeading === 'number') {
+      heading = ev.webkitCompassHeading; // iOS: rumo magnético (horário a partir do N)
+    } else if (ev.absolute === true && typeof ev.alpha === 'number') {
+      heading = 360 - ev.alpha;          // Android (orientação absoluta)
+    }
+    if (heading === null) return;
+    const screenAngle = (screen.orientation && screen.orientation.angle) || 0;
+    magneticHeading = ((heading + screenAngle) % 360 + 360) % 360;
+    renderCompass();
+  }
+
+  async function activateCompass() {
+    if (compassActive) return;
+    // iOS exige permissão explícita a partir de um gesto do usuário
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' &&
+          typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const res = await DeviceOrientationEvent.requestPermission();
+        if (res !== 'granted') {
+          headingEl.textContent = 'Permissão da bússola negada.';
+          return;
+        }
+      }
+    } catch (e) { /* alguns navegadores lançam se não for por gesto */ }
+
+    // 'deviceorientationabsolute' dá o norte no Android; iOS usa 'deviceorientation'
+    if ('ondeviceorientationabsolute' in window) {
+      window.addEventListener('deviceorientationabsolute', onOrientation);
+    }
+    window.addEventListener('deviceorientation', onOrientation);
+    compassActive = true;
+    btnCompass.textContent = 'Bússola ativa';
+    btnCompass.disabled = true;
+    if (declination === null && lastDeclLat === null) {
+      headingEl.textContent = 'Aguardando sensor... (obtenha a posição para o norte verdadeiro)';
+    }
+  }
+
+  btnCompass.addEventListener('click', activateCompass);
+
   function formatElapsed(ms) {
     const s = Math.floor(ms / 1000);
     const hh = String(Math.floor(s / 3600)).padStart(2, '0');
@@ -256,6 +418,7 @@
     if (speed !== null && !Number.isNaN(speed)) {
       speedEl.textContent = `${(speed * 3.6).toFixed(1)} km/h`;
     }
+    updateDeclination(latitude, longitude);
   }
 
   function checkSupport() {
