@@ -14,6 +14,9 @@ on:
       - '.github/workflows/android.yml'
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -52,9 +55,24 @@ jobs:
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
 
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk gps-tracker.apk
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: gps-tracker-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: gps-tracker.apk
           if-no-files-found: error
+
+      - name: Publish APK to Release (download direto)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: APK mais recente (debug)
+          body: |
+            APK de debug do GPS Tracker, gerado automaticamente a cada push na main.
+            Baixe o `gps-tracker.apk` abaixo direto no celular Android e instale
+            (permita "instalar de fontes desconhecidas"). Ao rastrear, aceite a
+            localização como "Permitir o tempo todo".
+          files: gps-tracker.apk
