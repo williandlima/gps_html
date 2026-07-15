@@ -270,6 +270,7 @@
 
   <button id="btnStart" class="btn-primary">Iniciar Rastreamento</button>
   <button id="btnStop" class="btn-danger" disabled>Encerrar Rastreamento</button>
+  <button id="btnReset" class="btn-secondary">Zerar Rastreamento</button>
 
   <p id="bgNote">Mantém a tela ligada durante o rastreamento. Se o app for para segundo
   plano ou a tela bloquear, o trajeto é "costurado" em linha reta ao voltar — a sessão
@@ -287,7 +288,7 @@
   const latEl = $('lat'), lonEl = $('lon'), accEl = $('acc'), timeEl = $('time');
   const distanceEl = $('distance'), elapsedEl = $('elapsed');
   const speedEl = $('speed'), avgSpeedEl = $('avgSpeed');
-  const btnGet = $('btnGet'), btnStart = $('btnStart'), btnStop = $('btnStop');
+  const btnGet = $('btnGet'), btnStart = $('btnStart'), btnStop = $('btnStop'), btnReset = $('btnReset');
   const roseEl = $('rose'), headingEl = $('heading'), declinationEl = $('declination'), btnCompass = $('btnCompass');
 
   let watchId = null;
@@ -325,7 +326,7 @@
 
   // Versão do app (mantida em sincronia com package.json). BUILD_INFO é substituído
   // pelo hash do commit + data no build nativo (scripts/copy-web.mjs); na web fica só a versão.
-  const APP_VERSION = '1.4.0';
+  const APP_VERSION = '1.4.1';
   const BUILD_INFO = '__BUILD__';
   (function showVersion() {
     const built = BUILD_INFO.indexOf('__') === 0 ? '' : ' · ' + BUILD_INFO;
@@ -818,6 +819,28 @@
     btnStart.textContent = 'Iniciar Rastreamento';
     btnGet.disabled = false;
     btnStop.disabled = true;
+  });
+
+  // Zera distância, tempo e referências. Funciona rastreando (recomeça do zero,
+  // sem parar) ou parado (limpa os valores e a sessão salva).
+  btnReset.addEventListener('click', () => {
+    if (totalDistance > 0 && !confirm('Zerar a distância e o tempo do rastreamento?')) return;
+    totalDistance = 0;
+    lastPos = null; lastTime = null; lastSpeed = null;
+    startTime = tracking ? Date.now() : null;
+    resumePending = false;
+    distanceEl.textContent = formatDistance(0);
+    elapsedEl.textContent = formatElapsed(0);
+    speedEl.textContent = '—';
+    avgSpeedEl.textContent = '—';
+    if (tracking) {
+      showTrackingStatus();
+      saveState();
+    } else {
+      clearState();
+      btnStart.textContent = 'Iniciar Rastreamento';
+      setStatus('Rastreamento zerado.');
+    }
   });
 
   // Ao voltar ao primeiro plano: re-adquire o wake lock e costura o trecho perdido.

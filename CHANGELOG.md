@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.4.1
+
+- Novo botão **Zerar Rastreamento**: reinicia distância e tempo. Funciona rastreando (recomeça do zero sem parar) ou parado (limpa valores e a sessão salva); pede confirmação se houver distância acumulada.
+- Auditoria: todas as implementações verificadas presentes (obter posição, distância híbrida, background nativo, wake lock, costura, persistência/retomada, bússola de norte verdadeiro, diagnóstico, versão no rodapé).
+
 ## v1.4.0
 
 - Novo **método híbrido de distância** (mais preciso que o do Strava, que superestima ~2–3%):
