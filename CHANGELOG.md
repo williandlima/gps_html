@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.3
+
+- App agora é instalável na tela inicial (PWA): abre em tela cheia (`display: standalone`), com ícone e nome próprios.
+- Adiciona `manifest.json`, ícones (`icon-192.png`, `icon-512.png`), `theme-color` e meta tags para iOS (`apple-mobile-web-app-*`).
+- `viewport-fit=cover` para melhor uso da tela em celulares com notch.
+
 ## v1.0.2
 
 - Reavalia a obtenção de coordenadas ("Obter Posição Atual"), que retornava um ponto com erro de quilômetros (nível de bairro/CEP).
