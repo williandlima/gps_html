@@ -375,7 +375,7 @@
 
   // Núcleo do cálculo: recebe uma posição e acumula distância se for movimento real.
   // Usado tanto pelo watch contínuo quanto pela "costura" ao voltar do segundo plano.
-  function ingestPosition(pos, { bridge = false } = {}) {
+  function ingestPosition(pos) {
     if (pos.coords.accuracy > ACCEPT_ACCURACY_M) return false;
 
     if (lastPos) {
@@ -383,11 +383,14 @@
         lastPos.coords.latitude, lastPos.coords.longitude,
         pos.coords.latitude, pos.coords.longitude
       );
-      // No modo normal, filtra tremor com passos de MIN_MOVE_M. Na costura (bridge),
-      // qualquer deslocamento real conta, pois representa o trecho percorrido enquanto
-      // o app estava suspenso (medido em linha reta entre onde parou e onde voltou).
-      const floor = bridge ? MIN_MOVE_M : MIN_MOVE_M;
-      if (d >= floor) {
+      // Limiar de movimento PROPORCIONAL À PRECISÃO: um deslocamento só conta se
+      // superar o ruído esperado do GPS (~0.75x a pior precisão dos dois pontos),
+      // nunca abaixo de MIN_MOVE_M. Isso evita "distância fantasma" com o aparelho
+      // parado e sinal fraco (onde o ponto oscila vários metros), sem perder a
+      // caminhada real — que, acumulando, supera o limiar em poucos segundos.
+      const worstAcc = Math.max(pos.coords.accuracy, lastPos.coords.accuracy || 0);
+      const threshold = Math.max(MIN_MOVE_M, 0.75 * worstAcc);
+      if (d >= threshold) {
         totalDistance += d;
         distanceEl.textContent = formatDistance(totalDistance);
         lastPos = pos;
@@ -485,7 +488,7 @@
     if (!tracking || !lastPos) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const added = ingestPosition(pos, { bridge: true });
+        const added = ingestPosition(pos);
         if (added) {
           setStatus(`Trecho em segundo plano somado. Total: ${formatDistance(totalDistance)}.`, 'tracking');
           setTimeout(showTrackingStatus, 2500);

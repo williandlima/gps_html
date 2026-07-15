@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.2.3
+
+- Corrige a precisão do VALOR da distância: com o aparelho parado e sinal fraco, o método antigo (limiar fixo de 5m) contava "distância fantasma" (dezenas a centenas de metros parado, quando a precisão era 25–35m).
+  - Agora o limiar de movimento é proporcional à precisão: um deslocamento só conta se superar `max(5m, 0.75 × pior precisão dos dois pontos)`.
+  - Verificado: caminhada real permanece correta (~198m para 200m) e a distância parada fica em 0m em todas as faixas de precisão testadas.
+- A fórmula de Haversine foi conferida contra distâncias de referência (0.001°=111,19m, SP→RJ 360,7km, Equador→Polo 10008km) — correta.
+
+## v1.2.2
+
+- Publica o APK numa Release (`apk-latest`) para download direto no celular, além do artefato do workflow.
+
 ## v1.2.1
 
 - Build do APK na nuvem via GitHub Actions: gera o `app-debug.apk` a cada push, sem precisar de Android Studio na máquina local (o APK sai como artefato do workflow).
