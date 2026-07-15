@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.4
+
+- Diagnóstico de precisão em níveis: detecta quando o aparelho entrega **localização aproximada** (rede/Wi-Fi, erro em nível de cidade) em vez do GPS e orienta o usuário a ativar "Localização Precisa" e o modo "Alta precisão".
+- Aumenta o tempo de estabilização do fix de 20s para 30s.
+- Mensagens distintas para precisão boa (≤20m), moderada (≤200m) e aproximada (>200m).
+
 ## v1.0.3
 
 - App agora é instalável na tela inicial (PWA): abre em tela cheia (`display: standalone`), com ícone e nome próprios.
