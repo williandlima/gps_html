@@ -1,6 +1,8 @@
-# Dependências e artefatos de build do Capacitor/Android — gerados localmente
+# Dependências e artefatos gerados localmente
 node_modules/
 www/
-android/
 .DS_Store
 package-lock.json
+
+# Nota: a pasta android/ É versionada (o build na nuvem usa ela). O .gitignore
+# interno de android/ já exclui build/, .gradle/, assets copiados e configs geradas.

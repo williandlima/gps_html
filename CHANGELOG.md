@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.2.1
+
+- Build do APK na nuvem via GitHub Actions: gera o `app-debug.apk` a cada push, sem precisar de Android Studio na máquina local (o APK sai como artefato do workflow).
+- Versiona o projeto `android/` já com as permissões de localização em segundo plano no `AndroidManifest.xml`.
+
 ## v1.2.0
 
 - Suporte a **app nativo Android** (Capacitor) com rastreamento **real em segundo plano e tela bloqueada**.
