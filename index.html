@@ -179,8 +179,10 @@
   let elapsedTimer = null;
 
   const R = 6371000; // raio da Terra em metros
-  const MAX_ACCURACY_M = 20; // descarta leituras com precisão pior que isso para o cálculo de distância
+  const MAX_ACCURACY_M = 20; // precisão considerada "boa" no botão Obter Posição
   const COARSE_ACCURACY_M = 200; // acima disso é quase certamente localização aproximada (rede/Wi-Fi), não GPS
+  const ACCEPT_ACCURACY_M = 35; // no rastreamento, aceita leituras até esta precisão (GPS real de celular)
+  const MIN_MOVE_M = 5; // só acumula deslocamentos a partir deste valor (filtra tremor parado, captura caminhada)
 
   function haversine(lat1, lon1, lat2, lon2) {
     const toRad = (d) => d * Math.PI / 180;
@@ -339,8 +341,8 @@
       (pos) => {
         renderPosition(pos);
 
-        if (pos.coords.accuracy > MAX_ACCURACY_M) {
-          // leitura ruim demais para confiar na distância: atualiza só o painel de posição
+        if (pos.coords.accuracy > ACCEPT_ACCURACY_M) {
+          // precisão ruim demais para confiar na distância: atualiza só o painel de posição
           return;
         }
 
@@ -349,10 +351,10 @@
             lastPos.coords.latitude, lastPos.coords.longitude,
             pos.coords.latitude, pos.coords.longitude
           );
-          // só conta como deslocamento real se superar o raio de incerteza combinado
-          // dos dois pontos; abaixo disso é ruído do próprio GPS, não movimento
-          const noiseThreshold = pos.coords.accuracy + lastPos.coords.accuracy;
-          if (d > noiseThreshold) {
+          // acumula em "passos": enquanto o deslocamento desde o último ponto
+          // contado for menor que MIN_MOVE_M, tratamos como tremor do GPS parado
+          // e mantemos lastPos; ao superar MIN_MOVE_M, somamos e avançamos o ponto.
+          if (d >= MIN_MOVE_M) {
             totalDistance += d;
             distanceEl.textContent = formatDistance(totalDistance);
             lastPos = pos;

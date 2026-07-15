@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.5
+
+- Corrige a distância percorrida que ficava em zero num trajeto real a pé.
+  - O rastreamento passa a aceitar leituras com precisão até 35m (antes 20m), faixa típica do GPS de celular ao ar livre; acima de 20m tudo era descartado e nada era contado.
+  - Substitui o limiar de ruído (que exigia superar a soma das precisões, ~20–40m) por acúmulo em "passos" de ≥5m: filtra o tremor com o aparelho parado, mas captura a caminhada.
+
 ## v1.0.4
 
 - Diagnóstico de precisão em níveis: detecta quando o aparelho entrega **localização aproximada** (rede/Wi-Fi, erro em nível de cidade) em vez do GPS e orienta o usuário a ativar "Localização Precisa" e o modo "Alta precisão".
