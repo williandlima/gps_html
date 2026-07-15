@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.2
+
+- Reavalia a obtenção de coordenadas ("Obter Posição Atual"), que retornava um ponto com erro de quilômetros (nível de bairro/CEP).
+  - Causa: `getCurrentPosition` entregava o primeiro fix disponível, quase sempre uma estimativa grosseira por IP/Wi-Fi, antes do GPS estabilizar.
+  - Agora o botão colhe leituras por até 20s e mantém a de menor raio de erro, encerrando assim que atinge precisão ≤ 20m.
+  - Feedback em tempo real ("Refinando precisão... X m") e aviso explícito quando a precisão final ainda estiver ruim.
+
 ## v1.0.1
 
 - Corrige método de filtragem de precisão do GPS, que causava erro grande no cálculo de distância.
