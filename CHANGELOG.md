@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.3.4
+
+- Mostra a **versão do app** no rodapé, para não confundir builds. No app nativo, inclui também o **hash do commit + data** (injetado no build por `scripts/copy-web.mjs`), identificando exatamente de qual commit veio cada APK.
+
 ## v1.3.3
 
 - Corrige a **distância exagerada a pé**: o ruído do GPS inflava o valor (numa caminhada real de 100m o método antigo chegava a marcar 180–420m).

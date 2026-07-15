@@ -122,6 +122,13 @@
     line-height: 1.4;
     margin: 4px 2px 0;
   }
+  #appFooter {
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--muted);
+    opacity: 0.7;
+    margin: 18px 0 8px;
+  }
   .dot {
     display: inline-block;
     width: 8px;
@@ -267,6 +274,8 @@
   <p id="bgNote">Mantém a tela ligada durante o rastreamento. Se o app for para segundo
   plano ou a tela bloquear, o trajeto é "costurado" em linha reta ao voltar — a sessão
   fica salva e pode ser retomada mesmo se o app for fechado.</p>
+
+  <footer id="appFooter">GPS Tracker</footer>
 </main>
 
 <script src="geomag.bundle.js"></script>
@@ -311,6 +320,16 @@
       timestamp: loc.time || Date.now()
     };
   }
+
+  // Versão do app (mantida em sincronia com package.json). BUILD_INFO é substituído
+  // pelo hash do commit + data no build nativo (scripts/copy-web.mjs); na web fica só a versão.
+  const APP_VERSION = '1.3.4';
+  const BUILD_INFO = '__BUILD__';
+  (function showVersion() {
+    const built = BUILD_INFO.indexOf('__') === 0 ? '' : ' · ' + BUILD_INFO;
+    const f = document.getElementById('appFooter');
+    if (f) f.textContent = `GPS Tracker v${APP_VERSION}${built}`;
+  })();
 
   const R = 6371000; // raio da Terra em metros
   const MAX_ACCURACY_M = 20; // precisão considerada "boa" no botão Obter Posição
