@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.3.3
+
+- Corrige a **distância exagerada a pé**: o ruído do GPS inflava o valor (numa caminhada real de 100m o método antigo chegava a marcar 180–420m).
+  - **Gate de velocidade**: usa a velocidade do GPS (Doppler) para detectar "parado" de forma confiável — abaixo de ~1,8 km/h não acumula, eliminando a distância fantasma mesmo com o sinal oscilando.
+  - **Limiar de movimento maior** (max(15m, 1,5 × precisão), antes 0,75×) para reduzir a inflação por zigue-zague ao caminhar.
+  - **Descarta leituras piores que 25m** de precisão (antes 35m) e aumenta o `distanceFilter` nativo para 10m.
+  - Verificado por simulação (ruído realista): caminhada de 100m → ~95–100m; parado 3min → ~0m; 1000m → ~1050m com boa precisão.
+
 ## v1.3.2
 
 - Bússola: usa apenas o evento de orientação **absoluto** (referenciado ao norte) quando disponível, em vez de registrar também o evento relativo. Isso limpa o diagnóstico (que mostrava `rumo bruto: —` do evento relativo) e evita qualquer risco de leitura sem referência ao norte.

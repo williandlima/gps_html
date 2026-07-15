@@ -315,8 +315,11 @@
   const R = 6371000; // raio da Terra em metros
   const MAX_ACCURACY_M = 20; // precisão considerada "boa" no botão Obter Posição
   const COARSE_ACCURACY_M = 200; // acima disso é quase certamente localização aproximada (rede/Wi-Fi), não GPS
-  const ACCEPT_ACCURACY_M = 35; // no rastreamento, aceita leituras até esta precisão (GPS real de celular)
-  const MIN_MOVE_M = 5; // só acumula deslocamentos a partir deste valor (filtra tremor parado, captura caminhada)
+  const ACCEPT_ACCURACY_M = 25; // no rastreamento, descarta leituras piores que isso (ruído demais)
+  const MIN_MOVE_M = 15; // piso do limiar de movimento (metros)
+  const NOISE_FACTOR = 1.5; // limiar de movimento = max(MIN_MOVE_M, NOISE_FACTOR * precisão)
+  const MIN_SPEED_MS = 0.5; // abaixo desta velocidade (m/s ~1.8 km/h) trata como parado (não acumula)
+  const NATIVE_DISTANCE_FILTER_M = 10; // distanceFilter do plugin nativo (espaçamento mínimo entre leituras)
   const STORAGE_KEY = 'gpsTrackerSession'; // sessão persistida (sobrevive a fechar/reabrir o app)
 
   function haversine(lat1, lon1, lat2, lon2) {
@@ -588,20 +591,28 @@
   // Núcleo do cálculo: recebe uma posição e acumula distância se for movimento real.
   // Usado tanto pelo watch contínuo quanto pela "costura" ao voltar do segundo plano.
   function ingestPosition(pos) {
+    // 1) Descarta leituras com precisão ruim demais (ruído domina).
     if (pos.coords.accuracy > ACCEPT_ACCURACY_M) return false;
+
+    // 2) Gate de VELOCIDADE: a velocidade do GPS (efeito Doppler) detecta "parado"
+    //    de forma muito mais confiável que a diferença de posição. Se o aparelho
+    //    reporta velocidade abaixo de MIN_SPEED_MS, tratamos como parado e não
+    //    acumulamos (e mantemos lastPos, para medir o próximo movimento real a
+    //    partir daqui). Isso elimina a "distância fantasma" com o GPS oscilando
+    //    parado. Só aplica quando a velocidade está disponível e é confiável.
+    const spd = pos.coords.speed;
+    if (typeof spd === 'number' && spd >= 0 && spd < MIN_SPEED_MS) return false;
 
     if (lastPos) {
       const d = haversine(
         lastPos.coords.latitude, lastPos.coords.longitude,
         pos.coords.latitude, pos.coords.longitude
       );
-      // Limiar de movimento PROPORCIONAL À PRECISÃO: um deslocamento só conta se
-      // superar o ruído esperado do GPS (~0.75x a pior precisão dos dois pontos),
-      // nunca abaixo de MIN_MOVE_M. Isso evita "distância fantasma" com o aparelho
-      // parado e sinal fraco (onde o ponto oscila vários metros), sem perder a
-      // caminhada real — que, acumulando, supera o limiar em poucos segundos.
+      // 3) Limiar de movimento PROPORCIONAL À PRECISÃO: um deslocamento só conta se
+      //    superar o ruído esperado do GPS, nunca abaixo de MIN_MOVE_M. Reduz a
+      //    inflação da distância causada pelo zigue-zague do sinal ao caminhar.
       const worstAcc = Math.max(pos.coords.accuracy, lastPos.coords.accuracy || 0);
-      const threshold = Math.max(MIN_MOVE_M, 0.75 * worstAcc);
+      const threshold = Math.max(MIN_MOVE_M, NOISE_FACTOR * worstAcc);
       if (d >= threshold) {
         totalDistance += d;
         distanceEl.textContent = formatDistance(totalDistance);
@@ -656,7 +667,7 @@
             backgroundMessage: 'Rastreando sua rota em segundo plano.',
             requestPermissions: true,
             stale: false,
-            distanceFilter: MIN_MOVE_M
+            distanceFilter: NATIVE_DISTANCE_FILTER_M
           },
           (location, error) => {
             if (error) {
