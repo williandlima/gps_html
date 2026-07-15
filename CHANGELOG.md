@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.0
+
+- Continuidade em segundo plano / tela bloqueada (dentro do possível para um app web):
+  - **Wake Lock**: mantém a tela ligada durante o rastreamento para o app não ser suspenso.
+  - **Costura do trecho perdido**: ao voltar do segundo plano, pega um fix novo e soma, em linha reta, o deslocamento desde o último ponto salvo (o trecho percorrido enquanto o app esteve suspenso).
+  - **Persistência da sessão**: distância, tempo e último ponto são salvos no aparelho; se o app for fechado e reaberto, a sessão é recuperada com o botão "Retomar", que continua a contagem e costura o trecho.
+- Observação: rastreamento contínuo com a tela realmente apagada/bloqueada só é possível em app nativo; a costura em linha reta é uma aproximação (subestima trajetos curvos feitos com o app suspenso).
+
 ## v1.0.5
 
 - Corrige a distância percorrida que ficava em zero num trajeto real a pé.

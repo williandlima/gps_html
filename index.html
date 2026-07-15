@@ -116,6 +116,12 @@
   }
   #status.error { color: var(--danger); }
   #status.tracking { color: var(--accent); }
+  #bgNote {
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.4;
+    margin: 4px 2px 0;
+  }
   .dot {
     display: inline-block;
     width: 8px;
@@ -160,6 +166,10 @@
 
   <button id="btnStart" class="btn-primary">Iniciar Rastreamento</button>
   <button id="btnStop" class="btn-danger" disabled>Encerrar Rastreamento</button>
+
+  <p id="bgNote">Mantém a tela ligada durante o rastreamento. Se o app for para segundo
+  plano ou a tela bloquear, o trajeto é "costurado" em linha reta ao voltar — a sessão
+  fica salva e pode ser retomada mesmo se o app for fechado.</p>
 </main>
 
 <script>
@@ -173,16 +183,19 @@
   const btnGet = $('btnGet'), btnStart = $('btnStart'), btnStop = $('btnStop');
 
   let watchId = null;
-  let lastPos = null;
+  let lastPos = null;        // {latitude, longitude, accuracy} do último ponto contado
   let totalDistance = 0;
   let startTime = null;
   let elapsedTimer = null;
+  let tracking = false;
+  let wakeLock = null;
 
   const R = 6371000; // raio da Terra em metros
   const MAX_ACCURACY_M = 20; // precisão considerada "boa" no botão Obter Posição
   const COARSE_ACCURACY_M = 200; // acima disso é quase certamente localização aproximada (rede/Wi-Fi), não GPS
   const ACCEPT_ACCURACY_M = 35; // no rastreamento, aceita leituras até esta precisão (GPS real de celular)
   const MIN_MOVE_M = 5; // só acumula deslocamentos a partir deste valor (filtra tremor parado, captura caminhada)
+  const STORAGE_KEY = 'gpsTrackerSession'; // sessão persistida (sobrevive a fechar/reabrir o app)
 
   function haversine(lat1, lon1, lat2, lon2) {
     const toRad = (d) => d * Math.PI / 180;
@@ -311,24 +324,79 @@
       .finally(() => { btnGet.disabled = false; });
   });
 
-  btnStart.addEventListener('click', () => {
-    if (!checkSupport()) return;
+  // ---- Persistência da sessão (sobrevive a fechar/reabrir o app) ----
+  function saveState() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        tracking, totalDistance, startTime,
+        lastPos: lastPos ? {
+          latitude: lastPos.coords.latitude,
+          longitude: lastPos.coords.longitude,
+          accuracy: lastPos.coords.accuracy
+        } : null,
+        savedAt: Date.now()
+      }));
+    } catch (e) { /* localStorage indisponível: segue sem persistir */ }
+  }
+  function clearState() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  }
+  function loadState() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) { return null; }
+  }
 
-    totalDistance = 0;
-    lastPos = null;
-    startTime = Date.now();
-    distanceEl.textContent = formatDistance(0);
-    speedEl.textContent = '—';
-    avgSpeedEl.textContent = '—';
+  // Envelope leve para reusar a lógica de acúmulo com pontos vindos de qualquer fonte
+  function coordsOnly(latitude, longitude, accuracy) {
+    return { coords: { latitude, longitude, accuracy } };
+  }
 
-    setStatus('<span class="dot"></span> Rastreando...', 'tracking');
+  // Núcleo do cálculo: recebe uma posição e acumula distância se for movimento real.
+  // Usado tanto pelo watch contínuo quanto pela "costura" ao voltar do segundo plano.
+  function ingestPosition(pos, { bridge = false } = {}) {
+    if (pos.coords.accuracy > ACCEPT_ACCURACY_M) return false;
+
+    if (lastPos) {
+      const d = haversine(
+        lastPos.coords.latitude, lastPos.coords.longitude,
+        pos.coords.latitude, pos.coords.longitude
+      );
+      // No modo normal, filtra tremor com passos de MIN_MOVE_M. Na costura (bridge),
+      // qualquer deslocamento real conta, pois representa o trecho percorrido enquanto
+      // o app estava suspenso (medido em linha reta entre onde parou e onde voltou).
+      const floor = bridge ? MIN_MOVE_M : MIN_MOVE_M;
+      if (d >= floor) {
+        totalDistance += d;
+        distanceEl.textContent = formatDistance(totalDistance);
+        lastPos = pos;
+        saveState();
+        return true;
+      }
+    } else {
+      lastPos = pos;
+      saveState();
+    }
+    return false;
+  }
+
+  // ---- Wake Lock: mantém a tela ligada durante o rastreamento ----
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch (e) { /* pode falhar se a aba não estiver visível; re-tentamos ao voltar */ }
+  }
+  function releaseWakeLock() {
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  }
+
+  function showTrackingStatus() {
     statusEl.innerHTML = '<span class="dot"></span> Rastreando...';
     statusEl.className = 'tracking';
+  }
 
-    btnStart.disabled = true;
-    btnGet.disabled = true;
-    btnStop.disabled = false;
-
+  function startElapsedTimer() {
+    if (elapsedTimer !== null) return;
     elapsedTimer = setInterval(() => {
       elapsedEl.textContent = formatElapsed(Date.now() - startTime);
       const hours = (Date.now() - startTime) / 3600000;
@@ -336,54 +404,112 @@
         avgSpeedEl.textContent = `${(totalDistance / 1000 / hours).toFixed(1)} km/h`;
       }
     }, 1000);
+  }
 
+  function startWatch() {
+    if (watchId !== null) return;
     watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        renderPosition(pos);
-
-        if (pos.coords.accuracy > ACCEPT_ACCURACY_M) {
-          // precisão ruim demais para confiar na distância: atualiza só o painel de posição
-          return;
-        }
-
-        if (lastPos) {
-          const d = haversine(
-            lastPos.coords.latitude, lastPos.coords.longitude,
-            pos.coords.latitude, pos.coords.longitude
-          );
-          // acumula em "passos": enquanto o deslocamento desde o último ponto
-          // contado for menor que MIN_MOVE_M, tratamos como tremor do GPS parado
-          // e mantemos lastPos; ao superar MIN_MOVE_M, somamos e avançamos o ponto.
-          if (d >= MIN_MOVE_M) {
-            totalDistance += d;
-            distanceEl.textContent = formatDistance(totalDistance);
-            lastPos = pos;
-          }
-        } else {
-          lastPos = pos;
-        }
-      },
+      (pos) => { renderPosition(pos); ingestPosition(pos); },
       (err) => setStatus(geoErrorMessage(err), 'error'),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
+  }
+
+  // "Costura": ao voltar do segundo plano, pega um fix novo e soma, em linha reta,
+  // o deslocamento desde o último ponto salvo (o trecho percorrido enquanto suspenso).
+  function bridgeGap() {
+    if (!tracking || !lastPos) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const added = ingestPosition(pos, { bridge: true });
+        if (added) {
+          setStatus(`Trecho em segundo plano somado. Total: ${formatDistance(totalDistance)}.`, 'tracking');
+          setTimeout(showTrackingStatus, 2500);
+        }
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    );
+  }
+
+  function beginTracking() {
+    tracking = true;
+    showTrackingStatus();
+    btnStart.disabled = true;
+    btnGet.disabled = true;
+    btnStop.disabled = false;
+    startElapsedTimer();
+    startWatch();
+    requestWakeLock();
+    saveState();
+  }
+
+  btnStart.addEventListener('click', () => {
+    if (!checkSupport()) return;
+    // início do zero
+    totalDistance = 0;
+    lastPos = null;
+    startTime = Date.now();
+    distanceEl.textContent = formatDistance(0);
+    speedEl.textContent = '—';
+    avgSpeedEl.textContent = '—';
+    elapsedEl.textContent = formatElapsed(0);
+    beginTracking();
   });
 
   btnStop.addEventListener('click', () => {
-    if (watchId !== null) {
-      navigator.geolocation.clearWatch(watchId);
-      watchId = null;
-    }
-    clearInterval(elapsedTimer);
-    elapsedTimer = null;
-
+    tracking = false;
+    if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+    clearInterval(elapsedTimer); elapsedTimer = null;
+    releaseWakeLock();
+    clearState();
     setStatus(`Rastreamento encerrado. Distância total: ${formatDistance(totalDistance)}.`);
-
     btnStart.disabled = false;
+    btnStart.textContent = 'Iniciar Rastreamento';
     btnGet.disabled = false;
     btnStop.disabled = true;
   });
 
+  // Ao voltar ao primeiro plano: re-adquire o wake lock e costura o trecho perdido.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && tracking) {
+      requestWakeLock();
+      startWatch(); // garante que o watch está ativo (pode ter sido suspenso)
+      bridgeGap();
+    }
+  });
+
+  // ---- Retomada de sessão salva (app foi fechado/recarregado durante o rastreamento) ----
+  let resumePending = false;
+
+  // Interceptor em fase de captura: se há retomada pendente, o clique em "Iniciar"
+  // continua a sessão (sem zerar) em vez de começar do zero.
+  btnStart.addEventListener('click', (ev) => {
+    if (resumePending) {
+      resumePending = false;
+      ev.stopImmediatePropagation(); // impede o handler que zera a sessão
+      btnStart.textContent = 'Iniciar Rastreamento';
+      if (!checkSupport()) return;
+      beginTracking();
+      bridgeGap();
+    }
+  }, true);
+
+  function offerResume() {
+    const s = loadState();
+    if (!s || !s.tracking) return;
+    totalDistance = s.totalDistance || 0;
+    startTime = s.startTime || Date.now();
+    lastPos = s.lastPos ? coordsOnly(s.lastPos.latitude, s.lastPos.longitude, s.lastPos.accuracy) : null;
+    distanceEl.textContent = formatDistance(totalDistance);
+    elapsedEl.textContent = formatElapsed(Date.now() - startTime);
+    btnStart.textContent = 'Retomar Rastreamento';
+    resumePending = true;
+    setStatus(`Sessão anterior recuperada (${formatDistance(totalDistance)}). Toque em "Retomar" para continuar e somar o trecho percorrido.`, 'tracking');
+  }
+
   checkSupport();
+  offerResume();
 })();
 </script>
 </body>
