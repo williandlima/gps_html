@@ -426,11 +426,15 @@
       }
     } catch (e) { /* alguns navegadores lançam se não for por gesto */ }
 
-    // 'deviceorientationabsolute' dá o norte no Android; iOS usa 'deviceorientation'
+    // Prefere o evento ABSOLUTO (referenciado ao norte). No Android é
+    // 'deviceorientationabsolute'; só cai no 'deviceorientation' (usado pelo iOS,
+    // que traz webkitCompassHeading) quando o absoluto não existe. Registrar os
+    // dois causava leituras relativas (sem norte) sobrescrevendo o diagnóstico.
     if ('ondeviceorientationabsolute' in window) {
       window.addEventListener('deviceorientationabsolute', onOrientation);
+    } else {
+      window.addEventListener('deviceorientation', onOrientation);
     }
-    window.addEventListener('deviceorientation', onOrientation);
     compassActive = true;
     btnCompass.textContent = 'Bússola ativa';
     btnCompass.disabled = true;

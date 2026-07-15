@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.3.2
+
+- Bússola: usa apenas o evento de orientação **absoluto** (referenciado ao norte) quando disponível, em vez de registrar também o evento relativo. Isso limpa o diagnóstico (que mostrava `rumo bruto: —` do evento relativo) e evita qualquer risco de leitura sem referência ao norte.
+
 ## v1.3.1
 
 - Modo **diagnóstico** na bússola (botão "Mostrar diagnóstico"): exibe os valores crus do sensor (`alpha`, `webkitCompassHeading`, rumo bruto, ângulo da tela, rumo magnético, declinação e rumo verdadeiro), para verificar/depurar o comportamento do magnetômetro em cada aparelho.
