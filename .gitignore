@@ -1,0 +1,6 @@
+# Dependências e artefatos de build do Capacitor/Android — gerados localmente
+node_modules/
+www/
+android/
+.DS_Store
+package-lock.json

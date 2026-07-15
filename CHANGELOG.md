@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.0
+
+- Suporte a **app nativo Android** (Capacitor) com rastreamento **real em segundo plano e tela bloqueada**.
+  - Integra o plugin `@capacitor-community/background-geolocation` (notificação persistente / serviço em primeiro plano).
+  - O mesmo `index.html` detecta o ambiente: no app nativo usa o plugin de background; na web mantém o fallback com a Geolocation do navegador (Wake Lock + costura + persistência).
+  - Projeto Capacitor: `package.json`, `capacitor.config.json`, script `scripts/copy-web.mjs` (gera `www/`) e guia de build `NATIVE.md`.
+- A web (GitHub Pages) continua funcionando sem alterações.
+
 ## v1.1.0
 
 - Continuidade em segundo plano / tela bloqueada (dentro do possível para um app web):

@@ -1,0 +1,20 @@
+{
+  "name": "gps-tracker",
+  "version": "1.2.0",
+  "description": "GPS Tracker - posição atual e distância percorrida, com rastreamento em segundo plano (Android via Capacitor).",
+  "private": true,
+  "scripts": {
+    "copy:web": "node scripts/copy-web.mjs",
+    "sync": "npm run copy:web && npx cap sync android",
+    "add:android": "npx cap add android",
+    "open:android": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor-community/background-geolocation": "^1.2.26"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.4.2"
+  }
+}

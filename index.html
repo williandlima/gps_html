@@ -189,6 +189,29 @@
   let elapsedTimer = null;
   let tracking = false;
   let wakeLock = null;
+  let bgWatcherId = null; // id do watcher do plugin nativo de background
+
+  // Detecta se estamos rodando dentro do app nativo (Capacitor) e obtém o plugin
+  // de geolocalização em segundo plano. Na web, ambos ficam nulos e usamos a
+  // Geolocation API do navegador (fallback).
+  const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const BackgroundGeolocation = (isNative && window.Capacitor.registerPlugin)
+    ? window.Capacitor.registerPlugin('BackgroundGeolocation')
+    : null;
+
+  // Adapta o objeto de localização do plugin nativo para o mesmo formato do
+  // Geolocation API do navegador, para reusar renderPosition/ingestPosition.
+  function adaptNativeLocation(loc) {
+    return {
+      coords: {
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        accuracy: loc.accuracy,
+        speed: (typeof loc.speed === 'number') ? loc.speed : null
+      },
+      timestamp: loc.time || Date.now()
+    };
+  }
 
   const R = 6371000; // raio da Terra em metros
   const MAX_ACCURACY_M = 20; // precisão considerada "boa" no botão Obter Posição
@@ -406,7 +429,38 @@
     }, 1000);
   }
 
-  function startWatch() {
+  async function startWatch() {
+    // App nativo: usa o plugin de background, que continua com a tela bloqueada
+    // e mostra uma notificação persistente (serviço em primeiro plano).
+    if (BackgroundGeolocation) {
+      if (bgWatcherId !== null) return;
+      try {
+        bgWatcherId = await BackgroundGeolocation.addWatcher(
+          {
+            backgroundTitle: 'GPS Tracker',
+            backgroundMessage: 'Rastreando sua rota em segundo plano.',
+            requestPermissions: true,
+            stale: false,
+            distanceFilter: MIN_MOVE_M
+          },
+          (location, error) => {
+            if (error) {
+              if (error.code === 'NOT_AUTHORIZED') {
+                setStatus('Permissão de localização em segundo plano negada. Abra as configurações do app e permita "O tempo todo".', 'error');
+              }
+              return;
+            }
+            const pos = adaptNativeLocation(location);
+            renderPosition(pos);
+            ingestPosition(pos);
+          }
+        );
+      } catch (e) {
+        setStatus('Falha ao iniciar o rastreamento em segundo plano.', 'error');
+      }
+      return;
+    }
+    // Web: Geolocation API do navegador (só rastreia com o app em primeiro plano)
     if (watchId !== null) return;
     watchId = navigator.geolocation.watchPosition(
       (pos) => { renderPosition(pos); ingestPosition(pos); },
@@ -415,9 +469,19 @@
     );
   }
 
+  async function stopWatch() {
+    if (BackgroundGeolocation && bgWatcherId !== null) {
+      try { await BackgroundGeolocation.removeWatcher({ id: bgWatcherId }); } catch (e) {}
+      bgWatcherId = null;
+    }
+    if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  }
+
   // "Costura": ao voltar do segundo plano, pega um fix novo e soma, em linha reta,
   // o deslocamento desde o último ponto salvo (o trecho percorrido enquanto suspenso).
+  // No app nativo o plugin já rastreia em background, então a costura não é necessária.
   function bridgeGap() {
+    if (isNative) return;
     if (!tracking || !lastPos) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -459,7 +523,7 @@
 
   btnStop.addEventListener('click', () => {
     tracking = false;
-    if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+    stopWatch();
     clearInterval(elapsedTimer); elapsedTimer = null;
     releaseWakeLock();
     clearState();
@@ -506,6 +570,16 @@
     btnStart.textContent = 'Retomar Rastreamento';
     resumePending = true;
     setStatus(`Sessão anterior recuperada (${formatDistance(totalDistance)}). Toque em "Retomar" para continuar e somar o trecho percorrido.`, 'tracking');
+  }
+
+  // No app nativo, o rastreamento em segundo plano é real; ajusta a nota explicativa.
+  if (isNative) {
+    const note = document.getElementById('bgNote');
+    if (note) {
+      note.textContent = 'Modo nativo: o rastreamento continua em segundo plano e com a ' +
+        'tela bloqueada, mantido por uma notificação persistente. A sessão fica salva e ' +
+        'pode ser retomada se o app for fechado.';
+    }
   }
 
   checkSupport();
