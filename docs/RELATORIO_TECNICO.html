@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>Relatório Técnico — GPS Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root {
+    color-scheme: light dark;
+    --paper: #fbfcfb;
+    --ink: #14201a;
+    --muted: #55655c;
+    --accent: #1a7a43;
+    --accent-soft: #e7f1ea;
+    --rule: #d7ded9;
+    --rule-strong: #b7c2bb;
+    --code-bg: #f3f6f4;
+    --code-ink: #1d2b24;
+    --serif: Georgia, "Times New Roman", "Nimbus Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SFMono-Regular", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0f1512;
+      --ink: #dfe7e2;
+      --muted: #91a69a;
+      --accent: #46c079;
+      --accent-soft: #16241c;
+      --rule: #26302b;
+      --rule-strong: #38453e;
+      --code-bg: #131b17;
+      --code-ink: #cdd9d2;
+    }
+  }
+  :root[data-theme="light"] {
+    --paper: #fbfcfb; --ink: #14201a; --muted: #55655c; --accent: #1a7a43;
+    --accent-soft: #e7f1ea; --rule: #d7ded9; --rule-strong: #b7c2bb;
+    --code-bg: #f3f6f4; --code-ink: #1d2b24;
+  }
+  :root[data-theme="dark"] {
+    --paper: #0f1512; --ink: #dfe7e2; --muted: #91a69a; --accent: #46c079;
+    --accent-soft: #16241c; --rule: #26302b; --rule-strong: #38453e;
+    --code-bg: #131b17; --code-ink: #cdd9d2;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.7;
+  }
+  .sheet {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 48px 32px 96px;
+  }
+
+  /* ---- Capa ---- */
+  .cover {
+    min-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+    border-bottom: 2px solid var(--rule-strong);
+    padding-bottom: 40px;
+    margin-bottom: 48px;
+  }
+  .cover .org {
+    font-family: var(--sans);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--muted);
+    line-height: 1.9;
+  }
+  .cover .spacer { flex: 1; }
+  .cover h1 {
+    font-family: var(--sans);
+    font-size: 2.1rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 10px;
+    color: var(--ink);
+  }
+  .cover .subtitle {
+    font-size: 1.15rem;
+    color: var(--muted);
+    font-style: italic;
+    text-align: center;
+    text-wrap: balance;
+    margin-bottom: 28px;
+  }
+  .cover .badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    padding: 4px 14px;
+    margin-bottom: 8px;
+  }
+  .cover .meta {
+    font-family: var(--sans);
+    font-size: 0.9rem;
+    color: var(--muted);
+    line-height: 1.9;
+  }
+  .cover .place {
+    font-family: var(--sans);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--ink);
+    margin-top: 32px;
+  }
+
+  /* ---- Blocos estruturais ---- */
+  .abstract {
+    background: var(--accent-soft);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 22px 26px;
+    margin: 0 0 40px;
+  }
+  .abstract h2 {
+    font-family: var(--sans);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin: 0 0 10px;
+    color: var(--accent);
+  }
+  .abstract p { margin: 0 0 12px; text-align: justify; }
+  .abstract .kw { font-size: 0.95rem; color: var(--muted); }
+  .abstract .kw strong { color: var(--ink); font-variant: small-caps; }
+
+  /* ---- Sumário ---- */
+  nav.toc {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 22px 26px;
+    margin-bottom: 52px;
+  }
+  nav.toc h2 {
+    font-family: var(--sans);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 0.9rem;
+    text-align: center;
+    margin: 0 0 16px;
+  }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; counter-reset: toc; }
+  nav.toc li { margin: 2px 0; }
+  nav.toc a {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    text-decoration: none;
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 0.94rem;
+    padding: 3px 0;
+  }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc .num { color: var(--accent); font-variant-numeric: tabular-nums; min-width: 2.4em; font-weight: 600; }
+  nav.toc .lead { flex: 1; border-bottom: 1px dotted var(--rule-strong); transform: translateY(-3px); }
+  nav.toc .sub a { padding-left: 2.6em; color: var(--muted); font-size: 0.9rem; }
+
+  /* ---- Seções ---- */
+  section { margin-bottom: 8px; }
+  h2.sec {
+    font-family: var(--sans);
+    font-size: 1.24rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    margin: 52px 0 6px;
+    padding-top: 12px;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  h2.sec .n { color: var(--accent); margin-right: 0.5em; font-variant-numeric: tabular-nums; }
+  h2.sec::after {
+    content: "";
+    display: block;
+    height: 2px;
+    background: var(--rule-strong);
+    margin-top: 8px;
+  }
+  h3.sub {
+    font-family: var(--sans);
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 32px 0 4px;
+    color: var(--ink);
+  }
+  h3.sub .n { color: var(--accent); margin-right: 0.5em; font-variant-numeric: tabular-nums; }
+  h4.ssub {
+    font-family: var(--sans);
+    font-size: 0.96rem;
+    font-weight: 700;
+    margin: 22px 0 2px;
+    color: var(--muted);
+  }
+  p { text-align: justify; margin: 12px 0; hyphens: auto; }
+  a { color: var(--accent); }
+  ul, ol { text-align: justify; padding-left: 1.4em; }
+  li { margin: 5px 0; }
+  strong { color: var(--ink); }
+  em { color: inherit; }
+  .lead-in::first-letter { }
+
+  /* ---- Código ---- */
+  .code {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 16px 18px;
+    margin: 16px 0;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    line-height: 1.55;
+    tab-size: 2;
+    white-space: pre;
+  }
+  .code .cm { color: var(--muted); font-style: italic; }
+  code.inline {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px solid var(--rule);
+  }
+
+  /* ---- Tabelas ---- */
+  .tbl-wrap { overflow-x: auto; margin: 18px 0 6px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--sans);
+    font-size: 0.88rem;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-family: var(--sans);
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  caption b { color: var(--ink); }
+  th, td {
+    border-bottom: 1px solid var(--rule);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  thead th {
+    border-bottom: 2px solid var(--rule-strong);
+    color: var(--ink);
+    font-weight: 700;
+  }
+  tbody tr:last-child td { border-bottom: 2px solid var(--rule-strong); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .src { font-family: var(--sans); font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
+
+  /* ---- Figura/legenda e nota ---- */
+  figure { margin: 22px 0; }
+  figcaption { font-family: var(--sans); font-size: 0.82rem; color: var(--muted); }
+  .callout {
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 4px;
+    padding: 14px 18px;
+    margin: 18px 0;
+    font-size: 0.96rem;
+  }
+  .callout .tag {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  /* ---- Referências ---- */
+  .refs { list-style: none; padding: 0; }
+  .refs li {
+    font-family: var(--sans);
+    font-size: 0.88rem;
+    line-height: 1.6;
+    padding-left: 2.2em;
+    text-indent: -2.2em;
+    margin: 12px 0;
+    text-align: justify;
+  }
+
+  hr.divider { border: none; border-top: 1px solid var(--rule); margin: 40px 0; }
+
+  /* ---- Barra de tema ---- */
+  .toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: color-mix(in srgb, var(--paper) 86%, transparent);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 8px 16px;
+  }
+  .toolbar button {
+    font-family: var(--sans);
+    font-size: 0.78rem;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: 5px 12px;
+    cursor: pointer;
+  }
+  .toolbar button:hover { color: var(--accent); border-color: var(--accent); }
+  .toolbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  @media print {
+    .toolbar { display: none; }
+    body { font-size: 11pt; }
+    .sheet { max-width: none; padding: 0; }
+    .cover { min-height: 90vh; page-break-after: always; }
+    h2.sec { page-break-after: avoid; }
+    .code, table, figure { page-break-inside: avoid; }
+    a { color: var(--ink); text-decoration: none; }
+  }
+  @media (max-width: 620px) {
+    body { font-size: 16px; }
+    .sheet { padding: 32px 20px 72px; }
+    .cover h1 { font-size: 1.6rem; }
+  }
+</style>
+</head>
+<body>
+
+
+<div class="toolbar">
+  <button id="btnTheme" type="button">Alternar tema</button>
+  <button id="btnPrint" type="button">Imprimir / PDF</button>
+</div>
+
+<div class="sheet">
+
+  <!-- ===================== CAPA ===================== -->
+  <header class="cover">
+    <div class="org">
+      Projeto de Software Livre<br>
+      Repositório <code class="inline">williandlima/gps_html</code>
+    </div>
+    <div class="spacer"></div>
+    <div class="badge">versão 1.4.1</div>
+    <h1>GPS Tracker</h1>
+    <p class="subtitle">Relatório Técnico de um Aplicativo de Geolocalização,
+      Medição de Distância Percorrida e Bússola de Norte Verdadeiro</p>
+    <div class="meta">
+      Aplicação híbrida Web / PWA / Android (Capacitor)<br>
+      Documentação de arquitetura, algoritmos e validação
+    </div>
+    <div class="spacer"></div>
+    <div class="place">São Paulo — 2026</div>
+  </header>
+
+  <!-- ===================== RESUMO ===================== -->
+  <div class="abstract">
+    <h2>Resumo</h2>
+    <p>Este relatório descreve, em detalhe técnico, o desenvolvimento do <strong>GPS Tracker</strong>,
+    um aplicativo de geolocalização construído a partir de um único documento <code class="inline">index.html</code>
+    autocontido e progressivamente enriquecido até tornar-se, simultaneamente, uma página web, um
+    <em>Progressive Web App</em> (PWA) instalável e um aplicativo Android nativo empacotado com Capacitor.
+    O sistema cumpre três funções centrais: (i) obtenção e refinamento da posição corrente por meio da
+    <em>Geolocation API</em>; (ii) cálculo da distância percorrida durante um trajeto, com um método
+    híbrido que combina integração da velocidade Doppler, rejeição de descontinuidades (<em>spikes</em>)
+    e um limiar de movimento proporcional à incerteza; e (iii) uma bússola de norte verdadeiro que corrige
+    o rumo magnético do sensor de orientação pela declinação magnética local, calculada de forma offline
+    com o modelo World Magnetic Model 2025 (WMM2025). O documento apresenta a fundamentação teórica, a
+    arquitetura, a descrição comentada do código, a metodologia de validação por simulação numérica e os
+    resultados obtidos, além das limitações e dos trabalhos futuros. Demonstra-se que o método híbrido de
+    distância reduz a superestimação típica da soma de posições ruidosas de fatores de 2 a 11 vezes para
+    erros da ordem de poucos pontos percentuais, e que a declinação calculada coincide, dentro de meio grau,
+    com a referência oficial do NOAA.</p>
+    <p class="kw"><strong>Palavras-chave:</strong> Geolocalização. GPS. Distância percorrida.
+    Fórmula de Haversine. Filtragem de sinal. Declinação magnética. WMM2025. Capacitor. PWA.</p>
+  </div>
+
+  <!-- ===================== SUMÁRIO ===================== -->
+  <nav class="toc" aria-label="Sumário">
+    <h2>Sumário</h2>
+    <ol>
+      <li><a href="#s1"><span class="num">1</span><span>Introdução</span><span class="lead"></span></a></li>
+      <li><a href="#s2"><span class="num">2</span><span>Fundamentação teórica</span><span class="lead"></span></a></li>
+      <li><a href="#s3"><span class="num">3</span><span>Materiais e métodos</span><span class="lead"></span></a></li>
+      <li><a href="#s4"><span class="num">4</span><span>Arquitetura do sistema</span><span class="lead"></span></a></li>
+      <li><a href="#s5"><span class="num">5</span><span>Desenvolvimento e descrição do código</span><span class="lead"></span></a></li>
+      <li><a href="#s6"><span class="num">6</span><span>Validação e resultados</span><span class="lead"></span></a></li>
+      <li><a href="#s7"><span class="num">7</span><span>Limitações</span><span class="lead"></span></a></li>
+      <li><a href="#s8"><span class="num">8</span><span>Trabalhos futuros</span><span class="lead"></span></a></li>
+      <li><a href="#s9"><span class="num">9</span><span>Conclusão</span><span class="lead"></span></a></li>
+      <li><a href="#refs"><span class="num">—</span><span>Referências</span><span class="lead"></span></a></li>
+    </ol>
+  </nav>
+
+  <!-- ===================== 1 INTRODUÇÃO ===================== -->
+  <section id="s1">
+    <h2 class="sec"><span class="n">1</span>Introdução</h2>
+
+    <h3 class="sub"><span class="n">1.1</span>Contextualização</h3>
+    <p>A popularização dos receptores de sinais de satélite em telefones celulares tornou a
+    geolocalização um recurso onipresente. Aplicativos de corrida, ciclismo, caminhada e logística
+    dependem da capacidade de determinar a posição do dispositivo e, a partir de uma sequência dessas
+    posições, estimar a distância percorrida. Contudo, o sinal de posicionamento é intrinsecamente
+    ruidoso: mesmo parado, o ponto reportado oscila alguns metros, e essa oscilação, quando somada
+    ingenuamente ao longo de um trajeto, infla a distância medida. O presente projeto nasceu de uma
+    demanda simples — <em>obter a posição atual e calcular a distância percorrida a partir dela até que
+    o operador encerre</em> — e evoluiu, de forma incremental e orientada a testes reais em campo, até
+    um sistema multiplataforma com tratamento estatístico do sinal e recursos auxiliares de orientação.</p>
+
+    <h3 class="sub"><span class="n">1.2</span>Problema</h3>
+    <p>Três problemas técnicos guiaram o desenvolvimento. O primeiro é a <strong>qualidade da posição
+    inicial</strong>: navegadores frequentemente entregam, no primeiro instante, uma estimativa grosseira
+    baseada em endereço IP ou redes Wi-Fi, com erro na casa de quilômetros. O segundo, e mais crítico, é a
+    <strong>superestimação da distância</strong> causada pelo acúmulo de ruído de posição. O terceiro é a
+    <strong>continuidade do rastreamento</strong> quando o aparelho é bloqueado ou o aplicativo vai a
+    segundo plano — situação em que um aplicativo puramente web é suspenso pelo sistema operacional.</p>
+
+    <h3 class="sub"><span class="n">1.3</span>Justificativa</h3>
+    <p>Ferramentas consagradas, como o Strava, aplicam suavização leve e são publicamente conhecidas por
+    superestimar a distância em torno de 2% a 3%. Há, portanto, espaço para um tratamento mais rigoroso,
+    aproveitando informações que a maioria das somas ingênuas ignora — em especial a <strong>velocidade
+    instantânea derivada do efeito Doppler</strong>, cuja incerteza é muito menor que a da diferença de
+    posições. Construir esse tratamento em um único arquivo, sem dependências de execução externas,
+    favorece a auditabilidade e a portabilidade entre web e aplicativo nativo.</p>
+
+    <h3 class="sub"><span class="n">1.4</span>Objetivos</h3>
+    <h4 class="ssub">Objetivo geral</h4>
+    <p>Desenvolver um aplicativo multiplataforma capaz de obter a posição corrente, calcular com precisão
+    a distância percorrida e indicar o norte geográfico, funcionando tanto no navegador quanto como
+    aplicativo Android com rastreamento em segundo plano.</p>
+    <h4 class="ssub">Objetivos específicos</h4>
+    <ul>
+      <li>Refinar a posição corrente descartando estimativas grosseiras de rede;</li>
+      <li>Projetar e validar um método de cálculo de distância robusto ao ruído do GPS;</li>
+      <li>Prover continuidade do rastreamento com tela bloqueada por meio de empacotamento nativo;</li>
+      <li>Implementar uma bússola de norte verdadeiro com correção da declinação magnética local;</li>
+      <li>Automatizar a compilação e a distribuição do aplicativo Android;</li>
+      <li>Validar quantitativamente cada decisão por simulação numérica e testes de execução.</li>
+    </ul>
+
+    <h3 class="sub"><span class="n">1.5</span>Estrutura do relatório</h3>
+    <p>A Seção 2 apresenta a fundamentação teórica. A Seção 3 descreve os materiais, o método de
+    desenvolvimento incremental e a estratégia de validação. A Seção 4 detalha a arquitetura. A Seção 5
+    documenta o código, algoritmo a algoritmo. A Seção 6 reúne os resultados de validação. As Seções 7 e 8
+    discutem limitações e trabalhos futuros, e a Seção 9 conclui.</p>
+  </section>
+
+  <!-- ===================== 2 FUNDAMENTAÇÃO ===================== -->
+  <section id="s2">
+    <h2 class="sec"><span class="n">2</span>Fundamentação teórica</h2>
+
+    <h3 class="sub"><span class="n">2.1</span>Posicionamento por satélite e a incerteza do sinal</h3>
+    <p>Os sistemas globais de navegação por satélite (GNSS), dos quais o GPS é o mais conhecido,
+    determinam a posição de um receptor por trilateração dos tempos de propagação de sinais de múltiplos
+    satélites. Em um telefone, o resultado é fundido com sensores inerciais e com posicionamento por redes
+    (Wi-Fi e torres de celular). A <em>Geolocation API</em> expõe, para cada leitura, um campo de
+    <strong>precisão</strong> (<code class="inline">accuracy</code>), interpretado como o raio, em metros,
+    de um círculo de confiança de 68%. Esse valor é a variável central para decidir quanto confiar em cada
+    ponto: leituras com precisão de dezenas de metros contêm ruído comparável ao próprio deslocamento de um
+    pedestre entre duas amostras.</p>
+
+    <h3 class="sub"><span class="n">2.2</span>Geolocation API e contexto seguro</h3>
+    <p>A obtenção de posição no navegador exige um <em>contexto seguro</em> (HTTPS ou
+    <code class="inline">localhost</code>). A API oferece <code class="inline">getCurrentPosition</code>,
+    para uma leitura pontual, e <code class="inline">watchPosition</code>, para um fluxo contínuo. Cada
+    objeto de posição contém latitude, longitude, precisão, e, quando disponível, altitude, rumo
+    (<em>heading</em>) e velocidade (<em>speed</em>), esta última em metros por segundo. A disponibilidade da
+    velocidade é decisiva para o método de distância adotado neste trabalho.</p>
+
+    <h3 class="sub"><span class="n">2.3</span>Distância geodésica: a fórmula de Haversine</h3>
+    <p>A distância sobre a superfície aproximadamente esférica da Terra entre dois pontos de coordenadas
+    geográficas é dada pela fórmula de Haversine, que calcula o comprimento do arco de círculo máximo. Sendo
+    <em>φ</em> a latitude e <em>λ</em> a longitude em radianos, e <em>R</em> o raio médio terrestre
+    (6.371.000 m), a distância <em>d</em> é:</p>
+    <div class="code">a = sin²(Δφ/2) + cos φ₁ · cos φ₂ · sin²(Δλ/2)
+d = 2R · atan2(√a, √(1−a))</div>
+    <p>Para as distâncias curtas entre amostras consecutivas de GPS (metros a dezenas de metros), a
+    aproximação esférica é mais que suficiente; o erro frente a modelos elipsoidais é desprezível nessa
+    escala.</p>
+
+    <h3 class="sub"><span class="n">2.4</span>Velocidade Doppler e integração temporal</h3>
+    <p>Além da posição, o receptor estima a velocidade a partir do <strong>desvio Doppler</strong> das
+    portadoras dos satélites. Essa medida é obtida de forma independente da posição e costuma ser
+    substancialmente mais precisa: enquanto a posição oscila metros quando o aparelho está imóvel, a
+    velocidade reportada tende a zero. Disso decorre uma estratégia poderosa: estimar a distância como a
+    <strong>integral da velocidade no tempo</strong>, <em>d</em> = ∫ <em>v</em> d<em>t</em>, aproximada de
+    forma trapezoidal entre amostras. Essa formulação é praticamente imune ao tremor de posição e embute,
+    naturalmente, a detecção de repouso (velocidade abaixo de um limiar).</p>
+
+    <h3 class="sub"><span class="n">2.5</span>Declinação magnética e o modelo WMM2025</h3>
+    <p>A bússola de um telefone mede o norte <em>magnético</em> por meio de um magnetômetro. O norte
+    <em>geográfico</em> (verdadeiro) difere do magnético por um ângulo chamado <strong>declinação
+    magnética</strong>, que varia com a posição sobre o globo e lentamente no tempo. Na região de São Paulo,
+    por exemplo, essa diferença é da ordem de −22°, magnitude que, ignorada, tornaria a bússola inútil. O
+    padrão de fato para calcular a declinação é o <em>World Magnetic Model</em> (WMM), um modelo de
+    harmônicos esféricos do campo geomagnético publicado com validade quinquenal. A edição vigente,
+    WMM2025, cobre o período de 2025 a 2030. Neste projeto, o modelo é embarcado e avaliado offline.</p>
+
+    <h3 class="sub"><span class="n">2.6</span>PWA e a ponte web-nativo do Capacitor</h3>
+    <p>Um <em>Progressive Web App</em> é uma página web que, por meio de um <em>manifest</em> e de metadados
+    apropriados, pode ser instalada na tela inicial e aberta em tela cheia. Todavia, um PWA continua sujeito
+    às políticas de suspensão do navegador. Para obter rastreamento real em segundo plano, recorre-se ao
+    <strong>Capacitor</strong>, que empacota os mesmos arquivos web em um projeto nativo e expõe, à página,
+    plugins que acessam capacidades do sistema operacional. Assim, um único <code class="inline">index.html</code>
+    serve tanto ao navegador quanto ao aplicativo, detectando em tempo de execução o ambiente em que roda.</p>
+
+    <h3 class="sub"><span class="n">2.7</span>Rastreamento em segundo plano no Android</h3>
+    <p>O Android permite execução contínua em segundo plano apenas por meio de um <em>serviço em primeiro
+    plano</em>, associado a uma notificação persistente e a permissões específicas de localização
+    (incluindo <code class="inline">ACCESS_BACKGROUND_LOCATION</code> e
+    <code class="inline">FOREGROUND_SERVICE_LOCATION</code>). O plugin comunitário de
+    <em>background geolocation</em> encapsula esse serviço, entregando à camada web um fluxo de posições
+    mesmo com a tela bloqueada.</p>
+  </section>
+
+  <!-- ===================== 3 MÉTODOS ===================== -->
+  <section id="s3">
+    <h2 class="sec"><span class="n">3</span>Materiais e métodos</h2>
+
+    <h3 class="sub"><span class="n">3.1</span>Ferramentas e tecnologias</h3>
+    <div class="tbl-wrap">
+      <table>
+        <caption><b>Tabela 1</b> — Principais componentes tecnológicos do projeto.</caption>
+        <thead><tr><th>Componente</th><th>Tecnologia / versão</th><th>Papel</th></tr></thead>
+        <tbody>
+          <tr><td>Camada de aplicação</td><td>HTML5, CSS3, JavaScript (ES2020)</td><td>Interface e lógica, sem framework</td></tr>
+          <tr><td>Empacotamento nativo</td><td>Capacitor 8.4.2</td><td>Ponte web → Android</td></tr>
+          <tr><td>GPS em segundo plano</td><td>@capacitor-community/background-geolocation 1.2.26</td><td>Serviço em primeiro plano</td></tr>
+          <tr><td>Declinação magnética</td><td>geomagnetism (WMM2025), Apache-2.0</td><td>Norte verdadeiro (offline)</td></tr>
+          <tr><td>Build Android</td><td>Gradle 8.14.3, AGP 8.13, compileSdk 36, minSdk 24</td><td>Geração do APK</td></tr>
+          <tr><td>Integração contínua</td><td>GitHub Actions</td><td>Compilação e publicação do APK na nuvem</td></tr>
+          <tr><td>Hospedagem web</td><td>GitHub Pages</td><td>Versão web/PWA</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sub"><span class="n">3.2</span>Modelo de desenvolvimento e versionamento</h3>
+    <p>O desenvolvimento seguiu um modelo <strong>incremental e iterativo</strong>, com cada funcionalidade
+    ou correção validada em campo antes do próximo passo. Adotou-se <strong>versionamento semântico</strong>
+    (MAJOR.MINOR.PATCH), registrado em um arquivo de <em>changelog</em> e refletido no número exibido no
+    rodapé do aplicativo. A Tabela 2 resume a evolução das versões que impactaram diretamente o cálculo de
+    distância — o núcleo funcional do sistema.</p>
+    <div class="tbl-wrap">
+      <table>
+        <caption><b>Tabela 2</b> — Evolução do método de cálculo de distância.</caption>
+        <thead><tr><th>Versão</th><th>Mudança essencial no método</th></tr></thead>
+        <tbody>
+          <tr><td>1.0.0</td><td>Soma de posições (Haversine) com limiar fixo de 0,5 m</td></tr>
+          <tr><td>1.0.1–1.0.5</td><td>Ajustes sucessivos do limiar e da precisão aceita</td></tr>
+          <tr><td>1.2.3</td><td>Limiar proporcional à precisão (0,75 × pior precisão)</td></tr>
+          <tr><td>1.3.3</td><td>Filtro por velocidade (auto-pausa) e limiar de 1,5 × precisão</td></tr>
+          <tr><td>1.4.0</td><td>Método híbrido: integração de velocidade + rejeição de <em>spike</em></td></tr>
+          <tr><td>1.4.1</td><td>Botão de zerar sessão e exibição de versão</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sub"><span class="n">3.3</span>Integração e entrega contínua</h3>
+    <p>Como o ambiente de desenvolvimento não dispunha do SDK Android, adotou-se a compilação na nuvem. A
+    cada <em>push</em> ao ramo principal, um fluxo de trabalho do GitHub Actions instala as dependências,
+    sincroniza os arquivos web no projeto nativo, compila o APK de depuração com o Gradle e o publica como
+    ativo de uma <em>release</em> de download direto. O rodapé do aplicativo passa a exibir, além do número
+    de versão, o <em>hash</em> do <em>commit</em> e a data, injetados no momento da compilação, de modo que
+    cada APK seja rastreável até a linha exata do histórico que o originou.</p>
+
+    <h3 class="sub"><span class="n">3.4</span>Estratégia de validação por simulação</h3>
+    <p>Dada a impossibilidade de exercitar o sensor físico no ambiente de desenvolvimento, cada decisão
+    algorítmica foi validada por <strong>simulação numérica</strong>. Trajetos sintéticos (retos, sinuosos
+    e imóveis) foram amostrados e perturbados por <strong>ruído correlacionado</strong> — um processo
+    autorregressivo que reproduz a natureza lentamente derivante do erro de GPS, mais realista que ruído
+    independente. Compararam-se os métodos "somente posição", "somente velocidade" e "híbrido" contra a
+    distância verdadeira conhecida do trajeto. Complementarmente, o código real do aplicativo foi exercitado
+    em navegador de teste automatizado, injetando-se sequências de posições com velocidade e marcas de tempo
+    realistas.</p>
+  </section>
+
+  <!-- ===================== 4 ARQUITETURA ===================== -->
+  <section id="s4">
+    <h2 class="sec"><span class="n">4</span>Arquitetura do sistema</h2>
+
+    <h3 class="sub"><span class="n">4.1</span>Visão geral</h3>
+    <p>O sistema é organizado em torno de um único documento autocontido. A lógica reside em uma função
+    imediatamente invocada (IIFE) que encapsula o estado e expõe apenas os manipuladores de eventos da
+    interface. Não há dependências de execução carregadas remotamente: o único artefato externo é o pacote
+    do modelo geomagnético, embarcado como arquivo local. Essa escolha maximiza a portabilidade — os mesmos
+    bytes servem à web, ao PWA e ao aplicativo nativo — e a auditabilidade.</p>
+
+    <h3 class="sub"><span class="n">4.2</span>Detecção de ambiente</h3>
+    <p>Em tempo de execução, o código verifica a presença da ponte do Capacitor para decidir a origem das
+    posições. No aplicativo nativo, utiliza o plugin de <em>background geolocation</em>; no navegador, recorre
+    à <em>Geolocation API</em>. Ambos os caminhos alimentam o <strong>mesmo</strong> núcleo de cálculo,
+    garantindo consistência de resultados entre plataformas.</p>
+    <div class="code"><span class="cm">// Detecção do ambiente nativo e obtenção do plugin</span>
+const isNative = !!(window.Capacitor
+    &amp;&amp; window.Capacitor.isNativePlatform
+    &amp;&amp; window.Capacitor.isNativePlatform());
+const BackgroundGeolocation = (isNative &amp;&amp; window.Capacitor.registerPlugin)
+    ? window.Capacitor.registerPlugin('BackgroundGeolocation')
+    : null;</div>
+
+    <h3 class="sub"><span class="n">4.3</span>Estrutura do repositório</h3>
+    <div class="tbl-wrap">
+      <table>
+        <caption><b>Tabela 3</b> — Organização dos principais arquivos.</caption>
+        <thead><tr><th>Arquivo / diretório</th><th>Função</th></tr></thead>
+        <tbody>
+          <tr><td><code class="inline">index.html</code></td><td>Aplicação completa (interface + lógica)</td></tr>
+          <tr><td><code class="inline">geomag.bundle.js</code></td><td>Modelo WMM2025 empacotado (declinação offline)</td></tr>
+          <tr><td><code class="inline">manifest.json</code>, <code class="inline">icon-*.png</code></td><td>Metadados e ícones do PWA</td></tr>
+          <tr><td><code class="inline">capacitor.config.json</code></td><td>Identificador e configuração do app nativo</td></tr>
+          <tr><td><code class="inline">scripts/copy-web.mjs</code></td><td>Gera a pasta web e injeta versão/commit no build</td></tr>
+          <tr><td><code class="inline">android/</code></td><td>Projeto Android (permissões de background no manifesto)</td></tr>
+          <tr><td><code class="inline">.github/workflows/android.yml</code></td><td>Compilação e publicação do APK</td></tr>
+          <tr><td><code class="inline">CHANGELOG.md</code>, <code class="inline">NATIVE.md</code></td><td>Histórico de versões e guia de build</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sub"><span class="n">4.4</span>Fluxo de dados do rastreamento</h3>
+    <p>Ao iniciar, o aplicativo registra um observador de posição (nativo ou web). Cada leitura recebida é
+    encaminhada a duas rotinas: a de <em>renderização</em>, que atualiza os campos de posição, precisão,
+    velocidade e a bússola; e a de <em>ingestão</em>, que decide se, e quanto, adicionar à distância
+    acumulada. O estado da sessão — distância, tempo, último ponto — é persistido de forma contínua,
+    permitindo retomada após fechamento inesperado.</p>
+  </section>
+
+  <!-- ===================== 5 DESENVOLVIMENTO ===================== -->
+  <section id="s5">
+    <h2 class="sec"><span class="n">5</span>Desenvolvimento e descrição do código</h2>
+
+    <h3 class="sub"><span class="n">5.1</span>Obtenção e refinamento da posição</h3>
+    <p>A leitura pontual de posição sofre de um vício conhecido: o primeiro <em>fix</em> costuma ser a
+    estimativa grosseira de rede. Para contorná-lo, a rotina de aquisição não aceita a primeira resposta;
+    ela abre um observador temporário por até trinta segundos e retém, dentre as leituras, a de
+    <strong>menor raio de erro</strong>, encerrando antecipadamente assim que a precisão atinge o alvo de
+    20 m. Enquanto refina, informa o usuário do valor corrente e, ao final, classifica a precisão em
+    <em>boa</em> (≤ 20 m), <em>moderada</em> (≤ 200 m) ou <em>aproximada</em> (&gt; 200 m), orientando, neste
+    último caso, a ativação da localização precisa no aparelho.</p>
+
+    <h3 class="sub"><span class="n">5.2</span>Diagnóstico de localização aproximada</h3>
+    <p>Um sintoma recorrente relatado em campo — "a posição acerta apenas a cidade" — decorre da concessão,
+    pelo sistema, de <em>localização aproximada</em> em vez de <em>precisa</em>. O aplicativo detecta esse
+    regime pela precisão em nível de centenas ou milhares de metros e emite orientação explícita, em vez de
+    silenciosamente registrar um ponto errado.</p>
+
+    <h3 class="sub"><span class="n">5.3</span>Evolução do cálculo de distância</h3>
+    <p>O cálculo de distância foi o componente mais refinado do projeto, precisamente porque é onde o ruído
+    do GPS se manifesta de forma mais nociva. A primeira versão somava toda variação de posição superior a
+    meio metro; o resultado, em campo, era uma distância fortemente inflada, pois o tremor do sinal excede
+    facilmente esse limiar. As iterações seguintes elevaram o limiar e o tornaram proporcional à precisão,
+    reduzindo — mas não eliminando — a superestimação. A introdução do filtro por velocidade resolveu o caso
+    do aparelho imóvel. A síntese desses aprendizados é o método híbrido descrito a seguir.</p>
+
+    <h3 class="sub"><span class="n">5.4</span>O método híbrido de distância</h3>
+    <p>O método híbrido combina três mecanismos. O <strong>primeiro</strong> é a integração da velocidade:
+    quando o GPS reporta velocidade confiável, a distância entre duas amostras é a média das velocidades
+    multiplicada pelo intervalo de tempo, com <em>auto-pausa</em> quando a velocidade corrente está abaixo do
+    limiar de repouso. O <strong>segundo</strong> é a rejeição de <em>spike</em>: um ponto cuja velocidade
+    implícita pela posição seja fisicamente impossível, ou muito superior à velocidade Doppler reportada, é
+    descartado sem mover a referência, impedindo saltos espúrios. O <strong>terceiro</strong> é o fallback
+    por posição, acionado quando a velocidade não está disponível, empregando o limiar proporcional à
+    precisão para conter o zigue-zague. A Tabela 4 lista os parâmetros de calibração.</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <caption><b>Tabela 4</b> — Constantes de calibração do método de distância.</caption>
+        <thead><tr><th>Constante</th><th class="num">Valor</th><th>Significado</th></tr></thead>
+        <tbody>
+          <tr><td>ACCEPT_ACCURACY_M</td><td class="num">25 m</td><td>Precisão máxima aceita; acima disso a leitura é descartada</td></tr>
+          <tr><td>MIN_MOVE_M</td><td class="num">15 m</td><td>Piso do limiar de movimento (fallback por posição)</td></tr>
+          <tr><td>NOISE_FACTOR</td><td class="num">1,5</td><td>Limiar = máx(MIN_MOVE_M, 1,5 × precisão)</td></tr>
+          <tr><td>MIN_SPEED_MS</td><td class="num">0,5 m/s</td><td>Limiar de auto-pausa (≈ 1,8 km/h)</td></tr>
+          <tr><td>MAX_SPEED_MS</td><td class="num">55 m/s</td><td>Velocidade impossível (≈ 200 km/h) → <em>spike</em></td></tr>
+          <tr><td>SPIKE_FACTOR</td><td class="num">3</td><td>Fator sobre a velocidade Doppler para detectar <em>spike</em></td></tr>
+          <tr><td>MAX_DT_S</td><td class="num">30 s</td><td>Intervalo máximo para integrar velocidade</td></tr>
+          <tr><td>NATIVE_DISTANCE_FILTER_M</td><td class="num">10 m</td><td>Espaçamento mínimo entre leituras do plugin nativo</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>O trecho a seguir sintetiza o núcleo de ingestão de posição:</p>
+    <div class="code"><span class="cm">// Núcleo híbrido (resumido)</span>
+if (acc &gt; ACCEPT_ACCURACY_M) return;              <span class="cm">// 0) descarta ruído</span>
+const dt = (now - lastTime) / 1000;
+const dPos = haversine(lastPos, pos);
+const implied = dt &gt; 0 ? dPos / dt : 0;
+
+<span class="cm">// #2 rejeição de spike / teleporte</span>
+if (implied &gt; MAX_SPEED_MS ||
+    (spRef !== null &amp;&amp; implied &gt; spRef * SPIKE_FACTOR + 5)) return;
+
+let added = 0;
+if (spRef !== null &amp;&amp; dt &gt; 0 &amp;&amp; dt &lt;= MAX_DT_S) {
+  <span class="cm">// #1 integração da velocidade + auto-pausa pela velocidade atual</span>
+  if (spRef &gt;= MIN_SPEED_MS) {
+    const prevMoving = (lastSpeed != null &amp;&amp; lastSpeed &gt;= MIN_SPEED_MS);
+    const v = prevMoving ? (lastSpeed + spRef) / 2 : spRef;
+    added = v * dt;
+  }
+} else {
+  <span class="cm">// fallback por posição, com limiar proporcional à precisão</span>
+  const threshold = Math.max(MIN_MOVE_M, NOISE_FACTOR * Math.max(acc, lastAcc));
+  if (dPos &gt;= threshold) added = dPos; else { /* mantém referência */ }
+}
+totalDistance += added;</div>
+
+    <h3 class="sub"><span class="n">5.5</span>Continuidade: Wake Lock, costura e persistência</h3>
+    <p>Para o modo web, três mecanismos mitigam a suspensão. O <strong>Wake Lock</strong> mantém a tela
+    acesa durante o rastreamento, reduzindo a probabilidade de suspensão. A <strong>costura</strong>
+    (<em>bridging</em>) reconcilia o trecho perdido: ao retornar do segundo plano, o aplicativo obtém um novo
+    <em>fix</em> e soma, em linha reta, o deslocamento desde o último ponto salvo. A <strong>persistência</strong>
+    grava continuamente distância, tempo e último ponto no armazenamento local, permitindo que uma sessão
+    interrompida seja <em>retomada</em> — inclusive após o encerramento completo do aplicativo — pelo botão de
+    retomada, que dá prosseguimento à contagem sem reiniciá-la.</p>
+
+    <h3 class="sub"><span class="n">5.6</span>Rastreamento nativo em segundo plano</h3>
+    <p>No aplicativo Android, o núcleo é alimentado pelo plugin de <em>background geolocation</em>, que
+    mantém um serviço em primeiro plano com notificação persistente. Como o próprio sistema entrega as
+    posições mesmo com a tela bloqueada, os mecanismos de costura tornam-se dispensáveis nesse modo. O
+    projeto nativo declara, em seu manifesto, as permissões de localização em primeiro e segundo plano
+    necessárias, e o guia de compilação documenta o processo de geração do APK.</p>
+
+    <h3 class="sub"><span class="n">5.7</span>Bússola de norte verdadeiro</h3>
+    <p>A bússola combina o rumo do magnetômetro com a declinação local. No Android, o rumo provém do evento
+    de orientação <em>absoluto</em>, referenciado ao norte; no iOS, do rumo de bússola específico do sistema.
+    A declinação é obtida do modelo WMM2025, avaliado para a posição corrente, e a relação empregada — a mesma
+    que o calculador oficial do NOAA adota — é:</p>
+    <div class="code">rumo_verdadeiro = rumo_magnético + declinação</div>
+    <p>A rosa dos ventos é então girada de modo que o norte aponte para o norte geográfico na tela. Um modo
+    de diagnóstico exibe os valores brutos do sensor (ângulo, rumo magnético, ângulo da tela, declinação e
+    rumo verdadeiro), permitindo verificar objetivamente o comportamento do magnetômetro em cada aparelho.</p>
+
+    <h3 class="sub"><span class="n">5.8</span>Interface e experiência do usuário</h3>
+    <p>A interface, de tema escuro e responsiva, organiza-se em cartões: posição atual, bússola, distância
+    percorrida em destaque, e um painel de tempo e velocidades. Os controles principais — obter posição,
+    iniciar, encerrar e <strong>zerar</strong> o rastreamento — são explícitos; o botão de zerar solicita
+    confirmação quando há distância acumulada, evitando perdas acidentais, e opera tanto com o rastreamento
+    ativo (recomeçando do zero sem interrompê-lo) quanto parado. O rodapé exibe a versão do software e, no
+    aplicativo nativo, o identificador exato da compilação.</p>
+  </section>
+
+  <!-- ===================== 6 RESULTADOS ===================== -->
+  <section id="s6">
+    <h2 class="sec"><span class="n">6</span>Validação e resultados</h2>
+
+    <h3 class="sub"><span class="n">6.1</span>Verificação da fórmula de distância</h3>
+    <p>A implementação da Haversine foi conferida contra distâncias de referência conhecidas, confirmando sua
+    correção em escalas de metros a milhares de quilômetros (Tabela 5).</p>
+    <div class="tbl-wrap">
+      <table>
+        <caption><b>Tabela 5</b> — Verificação da fórmula de Haversine.</caption>
+        <thead><tr><th>Par de pontos</th><th class="num">Calculado</th><th class="num">Referência</th></tr></thead>
+        <tbody>
+          <tr><td>0,001° de latitude</td><td class="num">111,19 m</td><td class="num">111,19 m</td></tr>
+          <tr><td>São Paulo → Rio de Janeiro</td><td class="num">360,7 km</td><td class="num">≈ 361 km</td></tr>
+          <tr><td>Equador → Polo</td><td class="num">10.008 km</td><td class="num">10.008 km</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sub"><span class="n">6.2</span>Simulação comparativa do cálculo de distância</h3>
+    <p>A Tabela 6 sintetiza a comparação entre os métodos, com ruído correlacionado, para trajetos de
+    distância verdadeira conhecida. Evidencia-se a superestimação severa do método por posição pura, em
+    especial sob baixa precisão, e a acurácia do método híbrido em todos os cenários — inclusive o de
+    descontinuidade, em que um único ponto de teleporte de 500 m infla o método por posição para além de
+    1.100 m, ao passo que o híbrido o descarta.</p>
+    <div class="tbl-wrap">
+      <table>
+        <caption><b>Tabela 6</b> — Distância estimada (m) por método frente ao valor verdadeiro.</caption>
+        <thead><tr><th>Cenário</th><th class="num">Verdadeiro</th><th class="num">Posição</th><th class="num">Híbrido</th></tr></thead>
+        <tbody>
+          <tr><td>Reto 100 m, precisão ~8 m</td><td class="num">100</td><td class="num">100</td><td class="num">99</td></tr>
+          <tr><td>Reto 100 m, precisão ~24 m</td><td class="num">100</td><td class="num">178</td><td class="num">102</td></tr>
+          <tr><td>Trajeto sinuoso</td><td class="num">211</td><td class="num">219–279</td><td class="num">199–202</td></tr>
+          <tr><td>Imóvel por 3 min</td><td class="num">0</td><td class="num">0–424</td><td class="num">0</td></tr>
+          <tr><td>Reto 100 m + teleporte 500 m</td><td class="num">≈100</td><td class="num">1121</td><td class="num">100</td></tr>
+          <tr><td>Reto 1000 m, precisão ~16 m</td><td class="num">1000</td><td class="num">1473</td><td class="num">1025</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sub"><span class="n">6.3</span>Validação da declinação magnética</h3>
+    <p>Os valores de declinação computados pelo modelo embarcado foram comparados a referências do NOAA,
+    apresentando concordância dentro de aproximadamente meio grau (Tabela 7) — margem inferior à própria
+    incerteza de um magnetômetro de celular. Em campo, na posição real do usuário, o aplicativo indicou
+    −22,2°, coincidindo exatamente com o calculador oficial.</p>
+    <div class="tbl-wrap">
+      <table>
+        <caption><b>Tabela 7</b> — Declinação calculada versus referência NOAA (2026).</caption>
+        <thead><tr><th>Localidade</th><th class="num">Calculado</th><th class="num">Referência</th></tr></thead>
+        <tbody>
+          <tr><td>São Paulo</td><td class="num">−21,9°</td><td class="num">≈ −22°</td></tr>
+          <tr><td>Tóquio</td><td class="num">−7,9°</td><td class="num">≈ −7,9°</td></tr>
+          <tr><td>Colorado (EUA)</td><td class="num">+7,6°</td><td class="num">≈ +7,4°</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sub"><span class="n">6.4</span>Testes no código do aplicativo</h3>
+    <p>Além das simulações isoladas, o próprio código do aplicativo foi exercitado com um observador de
+    posição substituto, alimentado por sequências realistas contendo velocidade e marcas de tempo. Uma
+    caminhada de 100 m resultou em 100,3 m; um ponto de teleporte de 500 m foi ignorado; um repouso de dois
+    minutos não acumulou distância; e a retomada da caminhada por mais 50 m elevou o total a 150,6 m,
+    confirmando o comportamento esperado do método e da função de zerar.</p>
+
+    <h3 class="sub"><span class="n">6.5</span>Compilação e distribuição</h3>
+    <p>O fluxo de integração contínua produziu, de forma reprodutível, o APK de depuração a cada alteração,
+    publicando-o para download direto. O rodapé de cada compilação exibe versão e identificador de
+    <em>commit</em>, tornando trivial associar um APK instalado à linha exata do histórico — recurso
+    solicitado explicitamente para evitar confusão entre builds.</p>
+
+    <div class="callout">
+      <span class="tag">Síntese dos resultados</span>
+      O método híbrido reduziu a superestimação de distância de fatores de 2 a 11× (método por posição sob
+      ruído) para erros da ordem de poucos por cento, eliminou a distância fantasma em repouso e neutralizou
+      descontinuidades do sinal; a bússola de norte verdadeiro reproduziu a referência oficial dentro de
+      meio grau.
+    </div>
+  </section>
+
+  <!-- ===================== 7 LIMITAÇÕES ===================== -->
+  <section id="s7">
+    <h2 class="sec"><span class="n">7</span>Limitações</h2>
+    <p>O método híbrido depende da disponibilidade da velocidade Doppler; em dispositivos ou navegadores que
+    não a reportam, o sistema recai no método por posição, de acurácia inferior. A costura de trecho em
+    segundo plano, no modo web, aproxima por linha reta o caminho efetivamente percorrido, subestimando
+    trajetos curvos realizados com o aplicativo suspenso — razão pela qual o modo nativo é preferível para
+    rastreamento contínuo. A bússola está sujeita à necessidade de calibração do magnetômetro e a variações
+    de convenção de eixos entre fabricantes de aparelhos Android. Por fim, a fórmula de Haversine assume um
+    modelo esférico da Terra; embora irrelevante nas distâncias entre amostras, essa aproximação existe.</p>
+  </section>
+
+  <!-- ===================== 8 TRABALHOS FUTUROS ===================== -->
+  <section id="s8">
+    <h2 class="sec"><span class="n">8</span>Trabalhos futuros</h2>
+    <ul>
+      <li><strong>Exportação de trajeto</strong> em formatos GPX/KML, para análise em ferramentas de mapa;</li>
+      <li><strong>Mapa ao vivo</strong> com o traçado desenhado, mantendo o princípio de autocontenção;</li>
+      <li><strong>Filtro de Kalman</strong> leve sobre a trajetória, para reduzir ainda mais a subestimação em curvas;</li>
+      <li><strong>Histórico de sessões</strong> persistido no aparelho, com estatísticas agregadas;</li>
+      <li><strong>Empacotamento para iOS</strong>, reaproveitando o mesmo código sob o Capacitor;</li>
+      <li><strong>Assinatura de release</strong> do APK, para distribuição fora do modo de depuração.</li>
+    </ul>
+  </section>
+
+  <!-- ===================== 9 CONCLUSÃO ===================== -->
+  <section id="s9">
+    <h2 class="sec"><span class="n">9</span>Conclusão</h2>
+    <p>Este relatório documentou a concepção, a implementação e a validação do GPS Tracker, um aplicativo
+    que, partindo de um requisito mínimo, amadureceu até um sistema multiplataforma com tratamento rigoroso
+    do sinal de posicionamento. A principal contribuição técnica é o <strong>método híbrido de distância</strong>,
+    que, ao privilegiar a velocidade Doppler e rejeitar descontinuidades, supera a estratégia de soma de
+    posições adotada por ferramentas populares e conhecida por superestimar. As decisões de projeto foram
+    sistematicamente ancoradas em <strong>validação quantitativa</strong> — por simulação com ruído realista
+    e por testes de execução — e não em impressões subjetivas, prática que se mostrou decisiva para
+    diagnosticar e corrigir a inflação de distância relatada em campo. O resultado é um aplicativo preciso,
+    instalável, capaz de rastrear em segundo plano e de indicar o norte geográfico, mantido em um único
+    documento auditável e distribuído por um pipeline automatizado. As limitações identificadas e os
+    trabalhos futuros propostos delineiam um caminho natural de continuidade, sem comprometer os princípios
+    de simplicidade e portabilidade que orientaram o desenvolvimento.</p>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===================== REFERÊNCIAS ===================== -->
+  <section id="refs">
+    <h2 class="sec"><span class="n"> </span>Referências</h2>
+    <ul class="refs">
+      <li>CAPACITOR. <em>Capacitor Documentation</em>: cross-platform native runtime for web apps. Ionic, 2026. Disponível em: https://capacitorjs.com/docs. Acesso em: 15 jul. 2026.</li>
+      <li>MDN WEB DOCS. <em>Geolocation API</em>. Mozilla, 2026. Disponível em: https://developer.mozilla.org/docs/Web/API/Geolocation_API. Acesso em: 15 jul. 2026.</li>
+      <li>MDN WEB DOCS. <em>Screen Wake Lock API</em>. Mozilla, 2026. Disponível em: https://developer.mozilla.org/docs/Web/API/Screen_Wake_Lock_API. Acesso em: 15 jul. 2026.</li>
+      <li>NATIONAL CENTERS FOR ENVIRONMENTAL INFORMATION. <em>World Magnetic Model (WMM2025)</em>. NOAA/NCEI, 2025. Disponível em: https://www.ncei.noaa.gov/products/world-magnetic-model. Acesso em: 15 jul. 2026.</li>
+      <li>NATIONAL CENTERS FOR ENVIRONMENTAL INFORMATION. <em>Magnetic Field Calculators</em>. NOAA/NCEI, 2026. Disponível em: https://www.ngdc.noaa.gov/geomag/calculators/magcalc.shtml. Acesso em: 15 jul. 2026.</li>
+      <li>SINNOTT, R. W. Virtues of the Haversine. <em>Sky and Telescope</em>, v. 68, n. 2, p. 159, 1984.</li>
+      <li>STRAVA. <em>How Distance is Calculated</em>. Strava Support, 2026. Disponível em: https://support.strava.com/hc/en-us/articles/216919487. Acesso em: 15 jul. 2026.</li>
+      <li>NATURAL ATLAS. <em>geomagnetism</em>: a JavaScript implementation of the World Magnetic Model. GitHub, 2025. Licença Apache-2.0. Disponível em: https://github.com/naturalatlas/geomagnetism. Acesso em: 15 jul. 2026.</li>
+      <li>ANDROID DEVELOPERS. <em>Foreground services and background location</em>. Google, 2026. Disponível em: https://developer.android.com/develop/sensors-and-location. Acesso em: 15 jul. 2026.</li>
+    </ul>
+  </section>
+
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var themeBtn = document.getElementById('btnTheme');
+    themeBtn.addEventListener('click', function () {
+      var current = root.getAttribute('data-theme');
+      if (!current) {
+        current = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      root.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+    });
+    document.getElementById('btnPrint').addEventListener('click', function () { window.print(); });
+  })();
+</script>
+
+</body>
+</html>

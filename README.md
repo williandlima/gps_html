@@ -8,6 +8,10 @@ App HTML/JS single-page para:
 
 Também empacotável como **app nativo Android** (Capacitor) com rastreamento em segundo plano — veja `NATIVE.md`.
 
+## Documentação
+
+- **Relatório técnico (padrão ABNT):** [`docs/RELATORIO_TECNICO.html`](docs/RELATORIO_TECNICO.html) — arquitetura, algoritmos, método híbrido de distância, bússola WMM2025 e validação. Abra no navegador; use o botão "Imprimir / PDF" para exportar.
+
 ## Créditos
 
 - Declinação magnética: [`geomagnetism`](https://github.com/naturalatlas/geomagnetism) (WMM2025), licença Apache-2.0 — embutido em `geomag.bundle.js`.
