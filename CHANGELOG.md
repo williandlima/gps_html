@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.5.0
+
+- **Filtro de Kalman** como método principal de distância (fusão ótima posição+velocidade), substituindo a soma de posições que ainda superestimava — sobretudo quando o aparelho não reporta velocidade Doppler.
+  - Modelo de velocidade constante em 2D; a distância é a integral da **velocidade filtrada** (suave, sem a inflação do zigue-zague).
+  - **Rejeição de outlier/spike** por distância de Mahalanobis.
+  - **Detecção de repouso** tripla: velocidade GPS (quando há), janela de deslocamento líquido e piso de velocidade.
+  - **Amostragem mais densa** no nativo (distanceFilter 10 m → 5 m) para alimentar o filtro.
+  - **Diagnóstico da distância**: mostra distância Kalman × soma bruta de posições, velocidade filtrada, amostras, spikes rejeitados, precisão média e % de leituras com velocidade GPS.
+- Validação (simulação + código do app): caminhada de 100 m → ~94–100 m; parado → ~0; spike de 500 m ignorado; contra a soma bruta que chegava a ~10× o valor real.
+
 ## v1.4.1
 
 - Novo botão **Zerar Rastreamento**: reinicia distância e tempo. Funciona rastreando (recomeça do zero sem parar) ou parado (limpa valores e a sessão salva); pede confirmação se houver distância acumulada.

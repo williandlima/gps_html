@@ -206,7 +206,7 @@
     background: #64748b;
     border-radius: 2px;
   }
-  #compassDebug {
+  #compassDebug, #distDebug {
     margin: 10px 0 0;
     padding: 10px;
     background: #0b1220;
@@ -266,6 +266,8 @@
     <div class="row"><span>Tempo decorrido</span><span id="elapsed">00:00:00</span></div>
     <div class="row"><span>Velocidade atual</span><span id="speed">—</span></div>
     <div class="row"><span>Velocidade média</span><span id="avgSpeed">—</span></div>
+    <button id="btnDistDebug" class="btn-secondary" style="margin:12px 0 0;">Diagnóstico da distância</button>
+    <pre id="distDebug" hidden></pre>
   </div>
 
   <button id="btnStart" class="btn-primary">Iniciar Rastreamento</button>
@@ -292,10 +294,20 @@
   const roseEl = $('rose'), headingEl = $('heading'), declinationEl = $('declination'), btnCompass = $('btnCompass');
 
   let watchId = null;
-  let lastPos = null;        // último ponto de referência (posição)
-  let lastTime = null;       // timestamp (ms) da última leitura aceita
-  let lastSpeed = null;      // velocidade (m/s) da última leitura aceita
+  let lastPos = null;        // última posição bruta aceita (para instrumentação/costura)
   let totalDistance = 0;
+
+  // --- Estado do filtro de Kalman e instrumentação ---
+  let kfX = null;            // vetor de estado [px, py, vx, vy] (metros, m/s no frame local)
+  let kfP = null;            // matriz de covariância 4x4
+  let kfLat0 = null, kfLon0 = null, kfCos0 = 1; // origem do frame local ENU
+  let kfLastT = null;        // timestamp da última atualização do filtro
+  let restWindow = [];       // buffer {t, x, y} do detector de repouso
+  let lastFilteredSpeed = 0; // velocidade filtrada corrente (m/s)
+  // instrumentação (diagnóstico da distância)
+  let rawPosSum = 0;         // distância pela soma bruta de posições (referência)
+  let lastRawLat = null, lastRawLon = null;
+  let nAccepted = 0, nSpike = 0, nWithSpeed = 0, accSum = 0;
   let startTime = null;
   let elapsedTimer = null;
   let tracking = false;
@@ -326,7 +338,7 @@
 
   // Versão do app (mantida em sincronia com package.json). BUILD_INFO é substituído
   // pelo hash do commit + data no build nativo (scripts/copy-web.mjs); na web fica só a versão.
-  const APP_VERSION = '1.4.1';
+  const APP_VERSION = '1.5.0';
   const BUILD_INFO = '__BUILD__';
   (function showVersion() {
     const built = BUILD_INFO.indexOf('__') === 0 ? '' : ' · ' + BUILD_INFO;
@@ -338,15 +350,16 @@
   const MAX_ACCURACY_M = 20; // precisão considerada "boa" no botão Obter Posição
   const COARSE_ACCURACY_M = 200; // acima disso é quase certamente localização aproximada (rede/Wi-Fi), não GPS
   const ACCEPT_ACCURACY_M = 25; // no rastreamento, descarta leituras piores que isso (ruído demais)
-  const MIN_MOVE_M = 15; // piso do limiar de movimento (metros) — usado no fallback por posição
-  const NOISE_FACTOR = 1.5; // limiar de movimento = max(MIN_MOVE_M, NOISE_FACTOR * precisão)
-  const MIN_SPEED_MS = 0.5; // abaixo desta velocidade (m/s ~1.8 km/h) trata como parado (não acumula)
-  const NATIVE_DISTANCE_FILTER_M = 10; // distanceFilter do plugin nativo (espaçamento mínimo entre leituras)
-  const MAX_SPEED_MS = 55; // acima disso (~200 km/h) é teleporte/spike do GPS — descarta o ponto
-  const SPIKE_FACTOR = 3; // ou se a velocidade implícita pela posição for > SPIKE_FACTOR x a velocidade Doppler
-  const SPIKE_MARGIN_MS = 5; // (+ esta margem), também trata como spike
-  const MAX_DT_S = 30; // acima deste intervalo entre leituras, não integra velocidade (usa fallback por posição)
+  const MIN_SPEED_MS = 0.4; // abaixo desta velocidade (m/s) trata como parado (não acumula)
+  const NATIVE_DISTANCE_FILTER_M = 5; // distanceFilter do plugin nativo — amostragem mais densa p/ o filtro
+  const MAX_DT_S = 30; // acima deste intervalo entre leituras, reinicia o filtro (houve lacuna)
   const STORAGE_KEY = 'gpsTrackerSession'; // sessão persistida (sobrevive a fechar/reabrir o app)
+
+  // --- Parâmetros do filtro de Kalman (modelo de velocidade constante em 2D) ---
+  const KF_SIGMA_A = 0.3;      // ruído de aceleração (m/s²) — quanto menor, mais suave
+  const KF_GATE = 16;          // limiar de Mahalanobis² (~4σ) para rejeitar spike/outlier
+  const REST_WINDOW_S = 15;    // janela do detector de repouso (s)
+  const REST_MIN_DISP_M = 6;   // deslocamento líquido mínimo na janela para não ser "parado" (m)
 
   function haversine(lat1, lon1, lat2, lon2) {
     const toRad = (d) => d * Math.PI / 180;
@@ -614,20 +627,29 @@
     return { coords: { latitude, longitude, accuracy } };
   }
 
-  // Núcleo do cálculo: recebe uma posição e acumula distância se for movimento real.
-  // Usado tanto pelo watch contínuo quanto pela "costura" ao voltar do segundo plano.
-  // Núcleo do cálculo (método híbrido, inspirado no que apps de precisão fazem
-  // melhor que o Strava):
-  //   #1 INTEGRAÇÃO DA VELOCIDADE: quando o GPS reporta velocidade (Doppler),
-  //      a distância é ∫v·dt — muito mais estável que somar posições ruidosas,
-  //      pois a velocidade Doppler quase não sofre com o tremor de posição.
-  //      Auto-pause embutido: abaixo de MIN_SPEED_MS não acumula (elimina
-  //      "distância fantasma" parado).
-  //   #2 REJEIÇÃO DE SPIKE/TELEPORTE: pontos que implicam velocidade impossível
-  //      (ou muito acima da velocidade Doppler) são descartados sem mover a
-  //      referência — evita saltos gigantes por falha momentânea do GPS.
-  //   Fallback: sem velocidade confiável (ou intervalo grande), volta a somar
-  //   posições com limiar proporcional à precisão (anti-zigue-zague).
+  // ---------- Filtro de Kalman 2D (modelo de velocidade constante) ----------
+  // Fusão ótima das posições ruidosas: o filtro mantém posição e velocidade e as
+  // corrige a cada leitura ponderando pela precisão informada (accuracy). A
+  // distância é a INTEGRAL da velocidade FILTRADA — suave e sem a inflação do
+  // zigue-zague de posição. Complementos: rejeição de outlier por distância de
+  // Mahalanobis (spike/teleporte) e detecção de repouso (velocidade GPS, janela de
+  // deslocamento e piso de velocidade). Trabalha em um frame local ENU em metros.
+  function toLocal(lat, lon) {
+    return [ (lon - kfLon0) * Math.PI / 180 * R * kfCos0,
+             (lat - kfLat0) * Math.PI / 180 * R ];
+  }
+  function kfReset(pos) {
+    const acc = pos.coords.accuracy;
+    kfLat0 = pos.coords.latitude; kfLon0 = pos.coords.longitude;
+    kfCos0 = Math.cos(kfLat0 * Math.PI / 180);
+    kfX = [0, 0, 0, 0];
+    const a2 = acc * acc;
+    kfP = [[a2,0,0,0],[0,a2,0,0],[0,0,4,0],[0,0,0,4]];
+    kfLastT = pos.timestamp || Date.now();
+    restWindow = [{ t: kfLastT, x: 0, y: 0 }];
+    lastFilteredSpeed = 0;
+  }
+
   function ingestPosition(pos) {
     const acc = pos.coords.accuracy;
     if (acc > ACCEPT_ACCURACY_M) return false;
@@ -636,54 +658,93 @@
     const rawSpeed = pos.coords.speed;
     const spRef = (typeof rawSpeed === 'number' && rawSpeed >= 0) ? rawSpeed : null;
 
-    // primeira leitura da sessão (ou logo após retomar): só inicializa referências
-    if (!lastPos || lastTime === null) {
-      lastPos = pos; lastTime = now; lastSpeed = spRef; saveState(); return false;
-    }
+    // instrumentação: soma bruta de posições (referência do método ingênuo)
+    const prevRawLat = lastRawLat, prevRawLon = lastRawLon;
+    if (lastRawLat !== null) rawPosSum += haversine(lastRawLat, lastRawLon, pos.coords.latitude, pos.coords.longitude);
+    lastRawLat = pos.coords.latitude; lastRawLon = pos.coords.longitude;
+    lastPos = pos;
+    accSum += acc; if (spRef !== null) nWithSpeed++;
 
-    const dt = (now - lastTime) / 1000; // segundos
-    const dPos = haversine(
-      lastPos.coords.latitude, lastPos.coords.longitude,
-      pos.coords.latitude, pos.coords.longitude
-    );
-    const impliedSpeed = dt > 0 ? dPos / dt : 0;
-
-    // #2 spike/teleporte: ignora o ponto (não move a referência)
-    if (impliedSpeed > MAX_SPEED_MS ||
-        (spRef !== null && impliedSpeed > spRef * SPIKE_FACTOR + SPIKE_MARGIN_MS)) {
-      return false;
-    }
-
-    let added = 0;
-    if (spRef !== null && dt > 0 && dt <= MAX_DT_S) {
-      // #1 integração da velocidade. Auto-pause pela velocidade ATUAL (não a média):
-      // parado, spRef < MIN_SPEED_MS -> não acumula. Em movimento, usa a média
-      // trapezoidal só quando a leitura anterior também estava em movimento (evita
-      // vazamento na transição andar->parar).
-      if (spRef >= MIN_SPEED_MS) {
-        const prevMoving = (lastSpeed != null && lastSpeed >= MIN_SPEED_MS);
-        const v = prevMoving ? (lastSpeed + spRef) / 2 : spRef;
-        added = v * dt;
+    // primeira leitura inicializa o filtro
+    if (kfX === null) { kfReset(pos); nAccepted++; saveState(); return false; }
+    let dt = (now - kfLastT) / 1000;
+    if (dt <= 0) dt = 1;
+    if (dt > MAX_DT_S) {
+      // lacuna (app suspenso em segundo plano): "costura" em linha reta o trecho
+      // percorrido enquanto suspenso e reinicia o filtro no ponto atual.
+      if (prevRawLat !== null) {
+        const bridge = haversine(prevRawLat, prevRawLon, pos.coords.latitude, pos.coords.longitude);
+        if (bridge > 0) { totalDistance += bridge; distanceEl.textContent = formatDistance(totalDistance); }
       }
-    } else {
-      // fallback por posição: limiar proporcional à precisão
-      const threshold = Math.max(MIN_MOVE_M, NOISE_FACTOR * Math.max(acc, lastPos.coords.accuracy || 0));
-      if (dPos >= threshold) {
-        added = dPos;
-      } else {
-        // movimento pequeno demais: mantém a referência de posição, atualiza só tempo/vel
-        lastTime = now; lastSpeed = spRef;
-        return false;
-      }
+      kfReset(pos); nAccepted++; saveState(); return true;
     }
 
-    if (added > 0) {
-      totalDistance += added;
+    const z = toLocal(pos.coords.latitude, pos.coords.longitude);
+
+    // Predição (velocidade constante): x = F·x ; P = F·P·Fᵀ + Q
+    kfX = [ kfX[0] + dt * kfX[2], kfX[1] + dt * kfX[3], kfX[2], kfX[3] ];
+    kfP = mAdd(mMul(mMul(F(dt), kfP), mT(F(dt))), Qk(dt));
+
+    // Inovação e rejeição de outlier (Mahalanobis²)
+    const r = acc * acc;
+    const yx = z[0] - kfX[0], yy = z[1] - kfX[1];
+    const S = [ [kfP[0][0] + r, kfP[0][1]], [kfP[1][0], kfP[1][1] + r] ];
+    const Si = inv2(S);
+    const md = yx * (Si[0][0] * yx + Si[0][1] * yy) + yy * (Si[1][0] * yx + Si[1][1] * yy);
+    if (md > KF_GATE) { nSpike++; kfLastT = now; return false; }
+
+    // Ganho K = P·Hᵀ·S⁻¹ (H seleciona posição); atualização do estado e da covariância
+    const PHt = [ [kfP[0][0], kfP[0][1]], [kfP[1][0], kfP[1][1]], [kfP[2][0], kfP[2][1]], [kfP[3][0], kfP[3][1]] ];
+    const K = mMul(PHt, Si); // 4x2
+    kfX = [ kfX[0] + K[0][0]*yx + K[0][1]*yy,
+            kfX[1] + K[1][0]*yx + K[1][1]*yy,
+            kfX[2] + K[2][0]*yx + K[2][1]*yy,
+            kfX[3] + K[3][0]*yx + K[3][1]*yy ];
+    // P = (I - K·H)·P  (K·H afeta só as colunas de posição)
+    const KH = [ [K[0][0],K[0][1],0,0],[K[1][0],K[1][1],0,0],[K[2][0],K[2][1],0,0],[K[3][0],K[3][1],0,0] ];
+    kfP = mMul(mSub(eye4(), KH), kfP);
+
+    // Velocidade filtrada e detecção de repouso
+    let spd = Math.hypot(kfX[2], kfX[3]);
+    lastFilteredSpeed = spd;
+    restWindow.push({ t: now, x: kfX[0], y: kfX[1] });
+    while (restWindow.length && (now - restWindow[0].t) / 1000 > REST_WINDOW_S) restWindow.shift();
+    const o = restWindow[0];
+    const netDisp = Math.hypot(kfX[0] - o.x, kfX[1] - o.y);
+
+    var resting = (netDisp < REST_MIN_DISP_M) || (spd < MIN_SPEED_MS);
+    if (spRef !== null && spRef < MIN_SPEED_MS) resting = true; // velocidade GPS confirma repouso
+    if (resting) spd = 0;
+
+    nAccepted++;
+    if (spd > 0) {
+      totalDistance += spd * dt;
       distanceEl.textContent = formatDistance(totalDistance);
     }
-    lastPos = pos; lastTime = now; lastSpeed = spRef;
+    kfLastT = now;
     saveState();
-    return added > 0;
+    return spd > 0;
+  }
+
+  // Helpers de matriz (dimensões pequenas e fixas)
+  function F(dt) { return [[1,0,dt,0],[0,1,0,dt],[0,0,1,0],[0,0,0,1]]; }
+  function Qk(dt) {
+    const s = KF_SIGMA_A * KF_SIGMA_A, d4 = dt*dt*dt*dt/4, d3 = dt*dt*dt/2, d2 = dt*dt;
+    return [[d4*s,0,d3*s,0],[0,d4*s,0,d3*s],[d3*s,0,d2*s,0],[0,d3*s,0,d2*s]];
+  }
+  function mT(A){ const B=[]; for(let j=0;j<A[0].length;j++){B[j]=[];for(let i=0;i<A.length;i++)B[j][i]=A[i][j];} return B; }
+  function mMul(A,B){ const r=A.length,n=B.length,c=B[0].length,C=[]; for(let i=0;i<r;i++){C[i]=[];for(let j=0;j<c;j++){let s=0;for(let k=0;k<n;k++)s+=A[i][k]*B[k][j];C[i][j]=s;}} return C; }
+  function mAdd(A,B){ return A.map((row,i)=>row.map((v,j)=>v+B[i][j])); }
+  function mSub(A,B){ return A.map((row,i)=>row.map((v,j)=>v-B[i][j])); }
+  function eye4(){ return [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]; }
+  function inv2(M){ const d=M[0][0]*M[1][1]-M[0][1]*M[1][0]; return [[M[1][1]/d,-M[0][1]/d],[-M[1][0]/d,M[0][0]/d]]; }
+
+  // Reinicia todo o estado de medição (distância, filtro, instrumentação)
+  function resetMeasurement() {
+    totalDistance = 0;
+    kfX = null; kfP = null; kfLastT = null; restWindow = []; lastFilteredSpeed = 0;
+    lastPos = null; lastRawLat = null; lastRawLon = null; rawPosSum = 0;
+    nAccepted = 0; nSpike = 0; nWithSpeed = 0; accSum = 0;
   }
 
   // ---- Wake Lock: mantém a tela ligada durante o rastreamento ----
@@ -796,10 +857,7 @@
   btnStart.addEventListener('click', () => {
     if (!checkSupport()) return;
     // início do zero
-    totalDistance = 0;
-    lastPos = null;
-    lastTime = null;
-    lastSpeed = null;
+    resetMeasurement();
     startTime = Date.now();
     distanceEl.textContent = formatDistance(0);
     speedEl.textContent = '—';
@@ -825,8 +883,7 @@
   // sem parar) ou parado (limpa os valores e a sessão salva).
   btnReset.addEventListener('click', () => {
     if (totalDistance > 0 && !confirm('Zerar a distância e o tempo do rastreamento?')) return;
-    totalDistance = 0;
-    lastPos = null; lastTime = null; lastSpeed = null;
+    resetMeasurement();
     startTime = tracking ? Date.now() : null;
     resumePending = false;
     distanceEl.textContent = formatDistance(0);
@@ -890,6 +947,34 @@
         'pode ser retomada se o app for fechado.';
     }
   }
+
+  // ---- Diagnóstico da distância (instrumentação) ----
+  const distDebug = $('distDebug'), btnDistDebug = $('btnDistDebug');
+  let distDebugOn = false, distDebugTimer = null;
+  function renderDistDebug() {
+    if (!distDebugOn) return;
+    const meanAcc = nAccepted > 0 ? (accSum / nAccepted) : 0;
+    const pctSpeed = nAccepted > 0 ? (100 * nWithSpeed / nAccepted) : 0;
+    distDebug.textContent =
+      `distância (Kalman): ${formatDistance(totalDistance)}\n` +
+      `soma bruta de posições: ${formatDistance(rawPosSum)}\n` +
+      `velocidade filtrada: ${lastFilteredSpeed.toFixed(2)} m/s (${(lastFilteredSpeed*3.6).toFixed(1)} km/h)\n` +
+      `amostras aceitas: ${nAccepted}\n` +
+      `spikes rejeitados: ${nSpike}\n` +
+      `precisão média: ${meanAcc.toFixed(1)} m\n` +
+      `leituras com velocidade GPS: ${pctSpeed.toFixed(0)}%`;
+  }
+  btnDistDebug.addEventListener('click', () => {
+    distDebugOn = !distDebugOn;
+    distDebug.hidden = !distDebugOn;
+    btnDistDebug.textContent = distDebugOn ? 'Ocultar diagnóstico' : 'Diagnóstico da distância';
+    if (distDebugOn) {
+      renderDistDebug();
+      distDebugTimer = setInterval(renderDistDebug, 1000);
+    } else if (distDebugTimer) {
+      clearInterval(distDebugTimer); distDebugTimer = null;
+    }
+  });
 
   checkSupport();
   offerResume();
