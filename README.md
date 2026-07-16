@@ -10,7 +10,7 @@ Também empacotável como **app nativo Android** (Capacitor) com rastreamento em
 
 ## Documentação
 
-- **Relatório técnico (padrão ABNT):** [`docs/RELATORIO_TECNICO.html`](docs/RELATORIO_TECNICO.html) — arquitetura, algoritmos, método híbrido de distância, bússola WMM2025 e validação. Abra no navegador; use o botão "Imprimir / PDF" para exportar.
+- **Relatório técnico (padrão ABNT):** **PDF:** [`docs/RELATORIO_TECNICO.pdf`](docs/RELATORIO_TECNICO.pdf) · **HTML:** [`docs/RELATORIO_TECNICO.html`](docs/RELATORIO_TECNICO.html) — arquitetura, algoritmos, método híbrido de distância, bússola WMM2025 e validação (edição oficial, relativa à v1.4.1).
 
 ## Créditos
 
