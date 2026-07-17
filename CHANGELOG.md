@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.8.0
+
+- **Segundo plano mais robusto (não perde mais a distância):** reavaliação do método de continuidade quando o app vai para segundo plano, tela bloqueia ou o sistema mata o app (comum em Samsung/Xiaomi).
+  - **Retomada automática no app nativo:** ao reabrir com uma sessão ativa, o rastreamento é retomado sozinho — sem depender de um toque em "Retomar" que, se esquecido/trocado, fazia perder o valor.
+  - **Costura da lacuna do segundo plano/kill:** no primeiro fix após retomar, o trecho entre o último ponto salvo e a posição atual é somado em linha reta (com trava de plausibilidade: só até 30 min de lacuna e velocidade coerente), recuperando o que foi percorrido enquanto o app esteve fora.
+  - **Gravação da sessão nos eventos de suspensão** (`visibilitychange` oculto, `pagehide`, `freeze`), além de a cada leitura — o estado é salvo logo antes de o sistema congelar/matar o app.
+  - **Aviso de bateria:** orientação para desativar a otimização de bateria do app (Samsung/Xiaomi), essencial para o sistema não matar o serviço em segundo plano.
+  - Diagnóstico ganha a linha **"costuras de 2º plano"** (quantas lacunas foram somadas em linha reta).
+
 ## v1.7.0
 
 - **Copiar coordenadas**: botão que copia `lat,lon` (graus decimais) no formato que o Google Maps entende direto na busca. Recai para um método alternativo de cópia quando a Clipboard API não está disponível (WebView antiga).

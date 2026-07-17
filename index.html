@@ -316,6 +316,7 @@
   let watchId = null;
   let currentLat = null, currentLon = null, currentAcc = null; // última posição exibida (p/ copiar/compartilhar)
   let lastPos = null;        // última posição bruta aceita (para instrumentação/costura)
+  let bridgeFrom = null;     // ponto salvo da sessão retomada, p/ costurar a lacuna do 2º plano/kill
   let totalDistance = 0;     // distância acumulada (soma de segmentos geodésicos filtrados)
 
   // --- Estado do método de distância (vértice de referência do segmento corrente) ---
@@ -333,6 +334,7 @@
   let nStationary = 0;       // leituras tratadas como "parado"
   let nSpike = 0;            // segmentos rejeitados como teleporte/spike
   let nWithSpeed = 0;        // leituras com velocidade Doppler
+  let nBridge = 0;           // costuras de lacuna (2º plano/kill) somadas em linha reta
   let accSum = 0;            // soma das precisões aceitas (p/ média)
   let lastAcc = null;        // última precisão vista (mesmo se descartada)
   let startTime = null;
@@ -365,7 +367,7 @@
 
   // Versão do app (mantida em sincronia com package.json). BUILD_INFO é substituído
   // pelo hash do commit + data no build nativo (scripts/copy-web.mjs); na web fica só a versão.
-  const APP_VERSION = '1.7.0';
+  const APP_VERSION = '1.8.0';
   const BUILD_INFO = '__BUILD__';
   (function showVersion() {
     const built = BUILD_INFO.indexOf('__') === 0 ? '' : ' · ' + BUILD_INFO;
@@ -781,11 +783,25 @@
 
     // primeiro fix aceito: inicializa referências
     if (refT === null) {
+      let bridged = false;
+      // sessão retomada (app suspenso/morto em 2º plano): costura em linha reta o
+      // trecho entre o último ponto salvo e este primeiro fix, se for plausível.
+      if (bridgeFrom) {
+        const bridge = haversine(bridgeFrom.latitude, bridgeFrom.longitude, lat, lon);
+        const gapDt = Math.max((now - (bridgeFrom.savedAt || now)) / 1000, 1);
+        // só costura se o intervalo for razoável (≤30 min) e a velocidade implícita
+        // plausível — evita somar linha reta absurda após lacunas muito longas/glitch.
+        if (bridge > MIN_STEP_M && gapDt <= 1800 && bridge / gapDt <= MAX_SPEED_MS) {
+          totalDistance += bridge; nCounted++; nBridge++; bridged = true;
+          distanceEl.textContent = formatDistance(totalDistance);
+        }
+        bridgeFrom = null;
+      }
       setRef(lat, lon, acc, now);
       restWindow = [{ t: now, lat, lon }];
       prevSpd = (spd !== null) ? spd : 0;
       saveState();
-      return false;
+      return bridged;
     }
 
     let dt = (now - refT) / 1000;
@@ -795,7 +811,7 @@
     // lacuna longa (app suspenso): "costura" o trecho em linha reta e recomeça
     if (dt > MAX_DT_S) {
       if (seg > 0 && seg / dt <= MAX_SPEED_MS) {
-        totalDistance += seg; nCounted++;
+        totalDistance += seg; nCounted++; nBridge++;
         distanceEl.textContent = formatDistance(totalDistance);
       }
       setRef(lat, lon, acc, now);
@@ -850,9 +866,9 @@
   function resetMeasurement() {
     totalDistance = 0;
     refLat = null; refLon = null; refAcc = null; refT = null;
-    restWindow = []; lastSpeedMs = 0; prevSpd = 0; lastPos = null;
+    restWindow = []; lastSpeedMs = 0; prevSpd = 0; lastPos = null; bridgeFrom = null;
     lastRawLat = null; lastRawLon = null; rawPosSum = 0;
-    nAccepted = 0; nCounted = 0; nDiscardAcc = 0; nStationary = 0; nSpike = 0; nWithSpeed = 0; accSum = 0; lastAcc = null;
+    nAccepted = 0; nCounted = 0; nDiscardAcc = 0; nStationary = 0; nSpike = 0; nWithSpeed = 0; nBridge = 0; accSum = 0; lastAcc = null;
   }
 
   // ---- Wake Lock: mantém a tela ligada durante o rastreamento ----
@@ -1014,8 +1030,13 @@
       requestWakeLock();
       startWatch(); // garante que o watch está ativo (pode ter sido suspenso)
       bridgeGap();
+    } else if (document.visibilityState === 'hidden' && tracking) {
+      saveState(); // grava o estado logo antes de o SO suspender/congelar/matar o app
     }
   });
+  // Grava também nos eventos de ciclo de vida da página (mais confiáveis antes de kill).
+  window.addEventListener('pagehide', () => { if (tracking) saveState(); });
+  document.addEventListener('freeze', () => { if (tracking) saveState(); });
 
   // ---- Retomada de sessão salva (app foi fechado/recarregado durante o rastreamento) ----
   let resumePending = false;
@@ -1039,20 +1060,37 @@
     totalDistance = s.totalDistance || 0;
     startTime = s.startTime || Date.now();
     lastPos = s.lastPos ? coordsOnly(s.lastPos.latitude, s.lastPos.longitude, s.lastPos.accuracy) : null;
+    // guarda o último ponto salvo para costurar, no 1º fix, a lacuna do 2º plano/kill
+    bridgeFrom = s.lastPos ? { latitude: s.lastPos.latitude, longitude: s.lastPos.longitude, savedAt: s.savedAt } : null;
     distanceEl.textContent = formatDistance(totalDistance);
     elapsedEl.textContent = formatElapsed(Date.now() - startTime);
-    btnStart.textContent = 'Retomar Rastreamento';
-    resumePending = true;
-    setStatus(`Sessão anterior recuperada (${formatDistance(totalDistance)}). Toque em "Retomar" para continuar e somar o trecho percorrido.`, 'tracking');
+
+    if (isNative) {
+      // App nativo: o rastreamento de 2º plano é real e o SO pode ter matado o app.
+      // Retoma AUTOMATICAMENTE (sem depender de um toque, que poderia zerar por engano)
+      // e o 1º fix costura o trecho percorrido enquanto o app esteve fora.
+      beginTracking();
+      setStatus(`Sessão retomada automaticamente (${formatDistance(totalDistance)}). Somando o trecho do segundo plano…`, 'tracking');
+      setTimeout(() => { if (tracking) showTrackingStatus(); }, 3500);
+    } else {
+      // Web: sem 2º plano real; retoma sob um gesto do usuário (necessário p/ o GPS/wake lock).
+      btnStart.textContent = 'Retomar Rastreamento';
+      resumePending = true;
+      setStatus(`Sessão anterior recuperada (${formatDistance(totalDistance)}). Toque em "Retomar" para continuar e somar o trecho percorrido.`, 'tracking');
+    }
   }
 
   // No app nativo, o rastreamento em segundo plano é real; ajusta a nota explicativa.
   if (isNative) {
     const note = document.getElementById('bgNote');
     if (note) {
-      note.textContent = 'Modo nativo: o rastreamento continua em segundo plano e com a ' +
-        'tela bloqueada, mantido por uma notificação persistente. A sessão fica salva e ' +
-        'pode ser retomada se o app for fechado.';
+      note.innerHTML = 'Modo nativo: o rastreamento continua em segundo plano e com a ' +
+        'tela bloqueada, mantido por uma notificação persistente. A sessão é gravada e ' +
+        '<b>retomada automaticamente</b> se o app for fechado — o trecho percorrido enquanto ' +
+        'esteve fora é somado em linha reta.<br><br>' +
+        '⚠️ <b>Importante (Samsung/Xiaomi/etc.):</b> para o sistema não matar o app e não perder ' +
+        'distância, desative a otimização de bateria: <b>Config. → Apps → GPS Tracker → Bateria → ' +
+        'Sem restrições</b> (e mantenha a localização em "Permitir o tempo todo").';
     }
   }
 
@@ -1073,6 +1111,7 @@
       `velocidade: ${lastSpeedMs.toFixed(2)} m/s (${(lastSpeedMs*3.6).toFixed(1)} km/h)\n` +
       `leituras aceitas: ${nAccepted}  |  descartadas p/ precisão: ${nDiscardAcc}\n` +
       `segmentos contados: ${nCounted}  |  parado: ${nStationary}  |  spikes: ${nSpike}\n` +
+      `costuras de 2º plano: ${nBridge}\n` +
       `leituras com velocidade GPS: ${pctSpeed.toFixed(0)}%`;
   }
   btnDistDebug.addEventListener('click', () => {
