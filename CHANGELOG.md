@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.7.0
+
+- **Copiar coordenadas**: botão que copia `lat,lon` (graus decimais) no formato que o Google Maps entende direto na busca. Recai para um método alternativo de cópia quando a Clipboard API não está disponível (WebView antiga).
+- **Abrir no Google Maps**: abre o ponto atual diretamente no Maps.
+- **Enviar localização**: usa o menu de compartilhamento do celular (Web Share API) — o WhatsApp aparece como opção junto dos demais apps. Sem Web Share, abre o WhatsApp direto (`wa.me`) com a mensagem já pronta contendo o link do Google Maps da posição.
+  - Observação: um app web/PWA não envia o "pin de localização nativo" do WhatsApp (exclusivo da API do WhatsApp Business); o link do mapa é a forma equivalente e universal — o destinatário toca e o mapa abre no ponto.
+- Os três botões ficam ativos assim que há uma posição (via "Obter Posição Atual" ou durante o rastreamento) e usam sempre a última leitura exibida.
+
 ## v1.6.0
 
 - **Correção crítica**: a pé o app não registrava nada (distância travada em 0). Causa: o limiar de precisão do rastreamento estava em **25 m**, e o GPS de celular ao ar livre costuma reportar 20–40 m — quase toda leitura era descartada e o filtro nunca inicializava. Agora o limiar é **40 m** (faixa real do GPS de celular), e leituras descartadas por sinal fraco aparecem no status e no diagnóstico, em vez de um 0 silencioso.

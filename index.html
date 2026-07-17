@@ -116,6 +116,18 @@
   }
   #status.error { color: var(--danger); }
   #status.tracking { color: var(--accent); }
+  .loc-actions {
+    display: flex;
+    gap: 10px;
+  }
+  .loc-actions button { flex: 1; margin-bottom: 10px; }
+  #locFeedback {
+    text-align: center;
+    font-size: 0.82rem;
+    color: var(--accent);
+    min-height: 1.1em;
+    margin: -2px 0 10px;
+  }
   #bgNote {
     font-size: 0.78rem;
     color: var(--muted);
@@ -236,6 +248,13 @@
 
   <button id="btnGet" class="btn-secondary">Obter Posição Atual</button>
 
+  <div class="loc-actions">
+    <button id="btnCopy" class="btn-secondary" disabled>📋 Copiar coordenadas</button>
+    <button id="btnShare" class="btn-secondary" disabled>📤 Enviar localização</button>
+  </div>
+  <button id="btnMaps" class="btn-secondary" disabled>🗺️ Abrir no Google Maps</button>
+  <div id="locFeedback" aria-live="polite"></div>
+
   <div class="card">
     <h2>Bússola — Norte Verdadeiro</h2>
     <div id="compassWrap">
@@ -291,9 +310,11 @@
   const distanceEl = $('distance'), elapsedEl = $('elapsed');
   const speedEl = $('speed'), avgSpeedEl = $('avgSpeed');
   const btnGet = $('btnGet'), btnStart = $('btnStart'), btnStop = $('btnStop'), btnReset = $('btnReset');
+  const btnCopy = $('btnCopy'), btnShare = $('btnShare'), btnMaps = $('btnMaps'), locFeedback = $('locFeedback');
   const roseEl = $('rose'), headingEl = $('heading'), declinationEl = $('declination'), btnCompass = $('btnCompass');
 
   let watchId = null;
+  let currentLat = null, currentLon = null, currentAcc = null; // última posição exibida (p/ copiar/compartilhar)
   let lastPos = null;        // última posição bruta aceita (para instrumentação/costura)
   let totalDistance = 0;     // distância acumulada (soma de segmentos geodésicos filtrados)
 
@@ -344,7 +365,7 @@
 
   // Versão do app (mantida em sincronia com package.json). BUILD_INFO é substituído
   // pelo hash do commit + data no build nativo (scripts/copy-web.mjs); na web fica só a versão.
-  const APP_VERSION = '1.6.0';
+  const APP_VERSION = '1.7.0';
   const BUILD_INFO = '__BUILD__';
   (function showVersion() {
     const built = BUILD_INFO.indexOf('__') === 0 ? '' : ' · ' + BUILD_INFO;
@@ -509,6 +530,8 @@
 
   function renderPosition(pos) {
     const { latitude, longitude, accuracy, speed } = pos.coords;
+    currentLat = latitude; currentLon = longitude; currentAcc = accuracy;
+    btnCopy.disabled = btnShare.disabled = btnMaps.disabled = false;
     latEl.textContent = latitude.toFixed(6);
     lonEl.textContent = longitude.toFixed(6);
     accEl.textContent = `${accuracy.toFixed(1)} m`;
@@ -606,6 +629,71 @@
       })
       .catch((err) => setStatus(geoErrorMessage(err), 'error'))
       .finally(() => { btnGet.disabled = false; });
+  });
+
+  // ---------- Copiar / compartilhar localização ----------
+  function hasCoords() { return currentLat !== null && currentLon !== null; }
+  // Formato que o Google Maps entende direto na busca: "lat,lon" (graus decimais)
+  function coordsText() { return `${currentLat.toFixed(6)},${currentLon.toFixed(6)}`; }
+  function mapsUrl() { return `https://www.google.com/maps/search/?api=1&query=${coordsText()}`; }
+
+  function flashFeedback(msg) {
+    locFeedback.textContent = msg;
+    clearTimeout(flashFeedback._t);
+    flashFeedback._t = setTimeout(() => { locFeedback.textContent = ''; }, 2500);
+  }
+
+  // Copia texto com a Clipboard API; recai para um <textarea> temporário quando ela
+  // não está disponível (WebView antiga / contexto sem permissão).
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) { /* cai no fallback abaixo */ }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  btnCopy.addEventListener('click', async () => {
+    if (!hasCoords()) return;
+    const ok = await copyText(coordsText());
+    flashFeedback(ok ? `Copiado: ${coordsText()}` : 'Não foi possível copiar — copie manualmente.');
+  });
+
+  btnMaps.addEventListener('click', () => {
+    if (!hasCoords()) return;
+    window.open(mapsUrl(), '_blank');
+  });
+
+  // Compartilhar: usa o menu nativo do celular (Web Share API) quando disponível —
+  // o WhatsApp aparece como opção junto de todos os apps. Sem Web Share, abre o
+  // WhatsApp direto (wa.me) com a mensagem já pronta contendo o link do mapa.
+  btnShare.addEventListener('click', async () => {
+    if (!hasCoords()) return;
+    const acc = currentAcc != null ? ` (precisão ~${currentAcc.toFixed(0)} m)` : '';
+    const msg = `Minha localização${acc}: ${mapsUrl()}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Minha localização', text: msg });
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return; // usuário cancelou o menu
+        /* sem suporte real: cai no WhatsApp abaixo */
+      }
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
   });
 
   // ---- Persistência da sessão (sobrevive a fechar/reabrir o app) ----
