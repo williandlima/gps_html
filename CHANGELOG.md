@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.6.0
+
+- **Correção crítica**: a pé o app não registrava nada (distância travada em 0). Causa: o limiar de precisão do rastreamento estava em **25 m**, e o GPS de celular ao ar livre costuma reportar 20–40 m — quase toda leitura era descartada e o filtro nunca inicializava. Agora o limiar é **40 m** (faixa real do GPS de celular), e leituras descartadas por sinal fraco aparecem no status e no diagnóstico, em vez de um 0 silencioso.
+- **Método de distância refeito com base em referências oficiais**, substituindo o filtro de Kalman (opaco e que zerava a medida):
+  - **Distância = Σ Haversine(pₖ, pₖ₊₁)** sobre os fixes aceitos — fórmula do grande círculo (Sinnott, 1984), padrão para distância entre lat/lon.
+  - **Filtro de distância (dead-band)**: um segmento só conta se superar o piso de ruído `max(3 m, 0.5 × precisão)` — técnica documentada (Android Location / GPX) que impede o tremor do sinal de inflar a distância.
+  - **Gating por velocidade Doppler** para detectar "parado" (com detector de deslocamento líquido como reserva quando o aparelho não reporta velocidade).
+  - **Rejeição de spike/teleporte** por velocidade implícita acima de ~200 km/h.
+  - **Costura** em linha reta de lacunas (app suspenso), preservada.
+- **Diagnóstico da distância** ampliado: mostra distância oficial × soma bruta, última precisão, precisão média, velocidade, leituras aceitas × descartadas por precisão, segmentos contados × parado × spikes e % de leituras com velocidade GPS.
+
 ## v1.5.0
 
 - **Filtro de Kalman** como método principal de distância (fusão ótima posição+velocidade), substituindo a soma de posições que ainda superestimava — sobretudo quando o aparelho não reporta velocidade Doppler.
